@@ -1,0 +1,3 @@
+[submodule "donutvpn-core"]
+	path = donutvpn-core
+	url = https://github.com/bobthebuilder1234232243/donutvpn-core.git

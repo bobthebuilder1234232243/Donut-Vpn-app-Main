@@ -1,0 +1,301 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:gap/gap.dart';
+import 'package:go_router/go_router.dart';
+import 'package:donutclub/core/localization/translations.dart';
+import 'package:donutclub/core/model/constants.dart';
+import 'package:donutclub/features/profile/add/widgets/widgets.dart';
+import 'package:donutclub/features/profile/model/profile_entity.dart';
+import 'package:donutclub/features/profile/notifier/profile_notifier.dart';
+import 'package:donutclub/utils/utils.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+
+class AddProfileModal extends HookConsumerWidget {
+  const AddProfileModal({super.key, this.url});
+  // static const warpConsentGiven = "warp_consent_given";
+  final String? url;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isLoading = ref.watch(addProfileNotifierProvider).isLoading;
+    final currentWidget = ref.watch(addProfilePageNotifierProvider);
+    ref.listen(addProfileNotifierProvider, (previous, next) {
+      if (next case AsyncData(value: final _?)) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (context.mounted && context.canPop()) context.pop();
+        });
+      }
+    });
+
+    useMemoized(() async {
+      await Future.delayed(const Duration(milliseconds: 200));
+      if (url != null && context.mounted) {
+        if (isLoading) return;
+        ref.read(addProfileNotifierProvider.notifier).addClipboard(url!);
+      }
+    });
+    return SafeArea(
+      child: isLoading
+          ? const ProfileLoading()
+          : switch (currentWidget) {
+              AddProfilePages.options => const AddProfileOptions(),
+              AddProfilePages.manual => const AddProfileManual(),
+            },
+    );
+  }
+}
+
+class AddProfileOptions extends HookConsumerWidget {
+  const AddProfileOptions({super.key});
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDesktop = PlatformUtils.isDesktop;
+    final gapCount = isDesktop ? AddProfileModalConst.fixBtnsGapCountDesktop : AddProfileModalConst.fixBtnsGapCount;
+    final itemCount = isDesktop ? AddProfileModalConst.fixBtnsItemCountDesktop : AddProfileModalConst.fixBtnsItemCount;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final fixBtnsHeight = (constraints.maxWidth - AddProfileModalConst.fixBtnsGap * gapCount) / itemCount;
+        final fullHeight = fixBtnsHeight + AddProfileModalConst.navBarHeight + 32;
+        final sheetSize = fullHeight / constraints.maxHeight;
+        return DraggableScrollableSheet(
+          initialChildSize: sheetSize,
+          minChildSize: sheetSize,
+          maxChildSize: sheetSize,
+          expand: false,
+          builder: (context, _) => Column(
+            children: [
+              const Gap(AddProfileModalConst.fixBtnsGap),
+              FixBtns(height: fixBtnsHeight),
+              const Spacer(),
+              const NavBar(),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class AddProfileManual extends HookConsumerWidget {
+  const AddProfileManual({super.key});
+
+  String _genSliderText(Translations t, int sliderValue) {
+    if (sliderValue == 0) {
+      return t.common.auto;
+    } else if (sliderValue < 24) {
+      return t.common.interval.hour(n: sliderValue);
+    }
+    final day = t.common.interval.day(n: sliderValue ~/ 24);
+    final hour = t.common.interval.hour(n: sliderValue % 24);
+    return '$day $hour';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final t = ref.watch(translationsProvider).requireValue;
+    final formKey = useMemoized(() => GlobalKey<FormState>());
+    final nameTextController = useTextEditingController();
+    final urlTextController = useTextEditingController();
+    final keyTextController = useTextEditingController();
+    final isAutoUpdateDisable = useState<bool>(false);
+    final updateInterval = useState(.0);
+    final sliderFocusNode = useFocusNode(
+      onKeyEvent: (node, event) {
+        if (KeyboardConst.verticalArrows.contains(event.logicalKey) && event is KeyDownEvent) {
+          if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+            node.previousFocus();
+          } else {
+            node.nextFocus();
+          }
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+    );
+    return Form(
+      key: formKey,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(16, 8, 8, 12),
+            child: Row(
+              children: [
+                Expanded(child: Text(t.common.manually, style: theme.textTheme.headlineMedium)),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => ref.read(addProfilePageNotifierProvider.notifier).goOptions(),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: CustomTextFormField(
+              maxLines: 1,
+              controller: nameTextController,
+              validator: (value) {
+                final key = keyTextController.text.trim();
+                if (key.isNotEmpty) return null;
+                return (value?.isEmpty ?? true) ? t.pages.profileDetails.form.emptyName : null;
+              },
+              label: t.common.name,
+              hint: t.pages.profileDetails.form.nameHint,
+            ),
+          ),
+          const Gap(16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: CustomTextFormField(
+              maxLines: 1,
+              controller: urlTextController,
+              validator: (value) {
+                final key = keyTextController.text.trim();
+                if (key.isNotEmpty) return null;
+                final url = value?.trim() ?? '';
+                if (url.isEmpty) return t.pages.profileDetails.form.invalidUrl;
+                return !isUrl(url) ? t.pages.profileDetails.form.invalidUrl : null;
+              },
+              label: t.common.url,
+              hint: t.pages.profileDetails.form.urlHint,
+            ),
+          ),
+          // "OR" divider between Subscription fields and Raw Key field.
+          const Gap(12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                const Expanded(child: Divider()),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    'OR',
+                    style: theme.textTheme.labelSmall!.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                const Expanded(child: Divider()),
+              ],
+            ),
+          ),
+          const Gap(12),
+          // Raw protocol key input.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: CustomTextFormField(
+              maxLines: 3,
+              controller: keyTextController,
+              label: 'Key / Protocol Link (e.g., vless://)',
+              hint: 'vless://, vmess://, ss://, trojan://, ...',
+            ),
+          ),
+          const Gap(12),
+          SwitchListTile.adaptive(
+            title: Text(
+              t.pages.profileDetails.form.disableAutoUpdate,
+              style: theme.textTheme.titleSmall!.copyWith(color: theme.colorScheme.onSurface),
+            ),
+            value: isAutoUpdateDisable.value,
+            onChanged: (value) => isAutoUpdateDisable.value = value,
+          ),
+          AnimatedSize(
+            alignment: Alignment.topCenter,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+            child: !isAutoUpdateDisable.value
+                ? Column(
+                    children: [
+                      const Divider(indent: 16, endIndent: 16),
+                      const Gap(12),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                t.pages.profileDetails.form.autoUpdateInterval,
+                                style: theme.textTheme.titleSmall!.copyWith(color: theme.colorScheme.onSurface),
+                              ),
+                            ),
+                            Text(
+                              _genSliderText(t, updateInterval.value.round()),
+                              style: theme.textTheme.labelSmall!.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Gap(4),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        child: Slider(
+                          focusNode: sliderFocusNode,
+                          value: updateInterval.value,
+                          max: 96,
+                          divisions: 96,
+                          label: updateInterval.value.round().toString(),
+                          onChanged: (double value) => updateInterval.value = value,
+                        ),
+                      ),
+                    ],
+                  )
+                : const SizedBox.shrink(),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16).copyWith(bottom: 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: FilledButton(
+                    child: Text(t.common.add),
+                    onPressed: () async {
+                      if (formKey.currentState!.validate()) {
+                        final key = keyTextController.text.trim();
+                        final name = nameTextController.text.trim();
+                        final url = urlTextController.text.trim();
+                        final i = updateInterval.value.toInt();
+                        final interval = i > 0 ? i : null;
+
+                        if (key.isNotEmpty) {
+                          // Only attach override if a name was explicitly typed.
+                          // Otherwise pass null so addLocal() falls back to the
+                          // name embedded in the key link (e.g. "#France #40926").
+                          final UserOverride? override = name.isNotEmpty
+                              ? UserOverride(
+                                  name: name,
+                                  isAutoUpdateDisable: isAutoUpdateDisable.value,
+                                  updateInterval: interval,
+                                )
+                              : null;
+
+                          await ref.read(addProfileNotifierProvider.notifier).addKey(
+                                key: key,
+                                userOverride: override,
+                              );
+                        } else {
+                          final override = UserOverride(
+                            name: name,
+                            isAutoUpdateDisable: isAutoUpdateDisable.value,
+                            updateInterval: interval,
+                          );
+
+                          await ref.read(addProfileNotifierProvider.notifier).addManual(
+                                url: url,
+                                userOverride: override,
+                              );
+                        }
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

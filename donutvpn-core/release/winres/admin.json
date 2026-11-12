@@ -1,0 +1,46 @@
+{
+  "RT_GROUP_ICON": {
+    "APP": {
+      "0000": "../../assets/donutvpn-admin.ico"
+    }
+  },
+  "RT_MANIFEST": {
+    "#1": {
+      "0409": {
+        "identity": {
+          "name": "DonutVpn.DonutVpnAdmin",
+          "version": "0.0.0.0"
+        },
+        "description": "DonutVpn VPN service setup (administrator)",
+        "minimum-os": "win7",
+        "execution-level": "requireAdministrator",
+        "ui-access": false,
+        "auto-elevate": false,
+        "dpi-awareness": "system",
+        "long-path-aware": true,
+        "use-common-controls-v6": false
+      }
+    }
+  },
+  "RT_VERSION": {
+    "#1": {
+      "0000": {
+        "fixed": {
+          "file_version": "0.0.0.0",
+          "product_version": "0.0.0.0"
+        },
+        "info": {
+          "0409": {
+            "CompanyName": "DonutVpn",
+            "FileDescription": "DonutVpn",
+            "InternalName": "DonutVpnAdmin",
+            "LegalCopyright": "Copyright (C) DonutVpn.com. All rights reserved.",
+            "OriginalFilename": "DonutVpnAdmin.exe",
+            "ProductName": "DonutVpn",
+            "Comments": "https://github.com/donutvpn/donutvpn-core"
+          }
+        }
+      }
+    }
+  }
+}

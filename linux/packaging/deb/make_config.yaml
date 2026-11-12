@@ -1,0 +1,52 @@
+display_name: Donut Vpn
+package_name: donutvpn
+maintainer:
+  name: Wen Zhang
+  email: wen471942@gmail.com
+
+priority: optional
+section: x11
+installed_size: 6604
+essential: false
+icon: assets/images/source/ic_launcher_border.png
+
+postinstall_scripts:
+  - echo "Setting up Donut Vpn..."
+  - sudo sed -i '/^\[Desktop Entry\]/a StartupWMClass=app.donutvpn.com' "/usr/share/applications/donutvpn.desktop"
+  - echo "Search and remove donutvpn.desktop from .local"
+  - for user_dir in /home/*; do if [ -f "$user_dir/.local/share/applications/donutvpn.desktop" ]; then rm -f "$user_dir/.local/share/applications/donutvpn.desktop"; echo "Found and removed donutvpn.desktop from $user_dir .local"; fi; done
+  - update-desktop-database /usr/share/applications
+  - echo "Donut Vpn is ready to use :)"
+
+postuninstall_scripts:
+  - echo "Removing Donut Vpn user data..."
+  - for user_dir in /home/*; do if [ -d "$user_dir/.local/share/app.donutvpn.com" ]; then rm -rf "$user_dir/.local/share/app.donutvpn.com"; echo "Removed data from $user_dir"; fi; done
+  - rm -rf /root/.local/share/app.donutvpn.com
+  - echo "Donut Vpn data cleanup complete."
+
+keywords:
+  - Donut Vpn
+  - Proxy
+  - VPN
+  - V2ray
+  - Nekoray
+  - Xray
+  - Psiphon
+  - OpenVPN
+
+generic_name: Donut Vpn
+
+categories:
+  - Network
+
+startup_notify: true
+supported_mime_type:
+  - x-scheme-handler/donutclub
+  - x-scheme-handler/v2ray
+  - x-scheme-handler/v2rayn
+  - x-scheme-handler/v2rayng
+  - x-scheme-handler/clash
+  - x-scheme-handler/clashmeta
+  - x-scheme-handler/sing-box
+
+metainfo: linux/packaging/app.donutvpn.com.appdata.xml

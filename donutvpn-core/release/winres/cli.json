@@ -1,0 +1,46 @@
+{
+  "RT_GROUP_ICON": {
+    "APP": {
+      "0000": "../../assets/donutvpn-cli.ico"
+    }
+  },
+  "RT_MANIFEST": {
+    "#1": {
+      "0409": {
+        "identity": {
+          "name": "DonutVpn.DonutVpnCli",
+          "version": "0.0.0.0"
+        },
+        "description": "DonutVpn command line interface",
+        "minimum-os": "win7",
+        "execution-level": "",
+        "ui-access": false,
+        "auto-elevate": false,
+        "dpi-awareness": "system",
+        "long-path-aware": true,
+        "use-common-controls-v6": false
+      }
+    }
+  },
+  "RT_VERSION": {
+    "#1": {
+      "0000": {
+        "fixed": {
+          "file_version": "0.0.0.0",
+          "product_version": "0.0.0.0"
+        },
+        "info": {
+          "0409": {
+            "CompanyName": "DonutVpn",
+            "FileDescription": "DonutVpn command line interface",
+            "InternalName": "DonutVpnCli",
+            "LegalCopyright": "Copyright (C) DonutVpn.com. All rights reserved.",
+            "OriginalFilename": "DonutVpnCli.exe",
+            "ProductName": "DonutVpn",
+            "Comments": "https://github.com/donutvpn/donutvpn-core"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,124 @@
+name: Build app
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      upload-artifact:
+        type: boolean
+        default: true
+      tag-name:
+        type: string
+        default: "draft"
+      channel:
+        type: string
+        default: "dev"
+
+env:
+  IS_GITHUB_ACTIONS: 1
+  CHANNEL: "${{ inputs.channel }}"
+  FLUTTER_VERSION: '3.38.5'
+  UPLOAD_ARTIFACT: "${{ inputs.upload-artifact }}"
+  TAG_NAME: "${{ inputs.tag-name }}"
+  TARGET_NAME_deb: "Donut-Vpn-Debian-x64"
+
+jobs:
+  test:
+    outputs:
+      draftBuildCode: ${{ steps.draftBuildCode.outputs.datetime }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: subosito/flutter-action@v2.21.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+      - name: Prepare
+        run: make linux-amd64-prepare
+      - name: Test
+        run: flutter test
+      - name: make draftBuildCode
+        id: draftBuildCode
+        run: echo "::set-output name=datetime::$(date +'%d.%H.%M')"
+
+  build:
+    needs: test
+    permissions: write-all
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            os: ubuntu-22.04
+            aarch: amd64
+            targets: deb
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2.21.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+      - name: Setup dependencies
+        run: |
+          make ${{ matrix.platform }}-install-deps
+          echo "$HOME/.pub-cache/bin" >> $GITHUB_PATH
+      - name: Prepare for ${{ matrix.platform }}
+        run: make ${{ matrix.platform }}-prepare
+      - name: Build ${{ matrix.platform }}
+        run: make ${{ matrix.platform }}-release
+      - name: Copy to out unix
+        run: |
+          ls -R dist/
+          mkdir out
+          mkdir tmp_out
+          for EXT in $(echo ${{ matrix.targets }} | tr ',' '\n'); do
+            KEY=TARGET_NAME_${EXT}
+            FILENAME=${!KEY}
+            mv dist/*/*.$EXT tmp_out/${FILENAME}.$EXT
+            [[ "$EXT" != "gz" ]] && chmod +x tmp_out/${FILENAME}.$EXT || echo "Skipping chmod for gz"
+            cp ./.github/help/linux/* tmp_out/
+            cd tmp_out
+            mv ${FILENAME}.$EXT ../out/
+            cd ..
+          done
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: donut-deb
+          path: ./out
+          retention-days: 7
+
+  update-draft:
+    permissions: write-all
+    if: ${{ inputs.upload-artifact }}
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v7
+        with:
+          merge-multiple: true
+          pattern: "*"
+          path: ./out/
+      - name: Delete Current Release Assets
+        uses: 8Mi-Tech/delete-release-assets-action@main
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          tag: 'draft'
+          deleteOnlyFromDrafts: false
+      - name: Create or Update Draft Release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          files: ./out/*
+          name: 'draft'
+          tag_name: 'draft'
+          prerelease: true
