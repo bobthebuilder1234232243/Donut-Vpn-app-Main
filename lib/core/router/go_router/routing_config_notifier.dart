@@ -4,7 +4,6 @@ import 'package:donutclub/core/localization/translations.dart';
 import 'package:donutclub/core/notification/in_app_notification_controller.dart';
 import 'package:donutclub/core/preferences/general_preferences.dart';
 import 'package:donutclub/core/router/adaptive_layout/my_adaptive_layout.dart';
-import 'package:donutclub/core/router/bottom_sheets/bottom_sheets_notifier.dart';
 import 'package:donutclub/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:donutclub/core/router/go_router/helper/custom_transition.dart';
 import 'package:donutclub/core/router/go_router/refresh_listenable.dart';
@@ -15,7 +14,6 @@ import 'package:donutclub/features/log/overview/logs_page.dart';
 import 'package:donutclub/features/per_app_proxy/overview/per_app_proxy_page.dart';
 import 'package:donutclub/features/profile/details/profile_details_page.dart';
 import 'package:donutclub/features/profile/notifier/active_profile_notifier.dart';
-import 'package:donutclub/features/profile/overview/profiles_page.dart';
 import 'package:donutclub/features/proxy/overview/proxies_overview_page.dart';
 import 'package:donutclub/features/route_rules/notifier/rule_notifier.dart';
 import 'package:donutclub/features/route_rules/overview/generic_list_page.dart';
@@ -35,7 +33,6 @@ part 'routing_config_notifier.g.dart';
 // each branch in go router has its own focus scope
 final branchesScope = <String, FocusScopeNode>{
   'home': FocusScopeNode(),
-  'profiles': FocusScopeNode(),
   'settings': FocusScopeNode(),
   'logs': FocusScopeNode(),
   'about': FocusScopeNode(),
@@ -46,28 +43,25 @@ final loadingConfig = RoutingConfig(
   routes: <RouteBase>[GoRoute(path: '/home', builder: (context, state) => const Material())],
 );
 
-String getNameOfBranch(bool isMobileBreakpoint, bool showProfilesAction, int index) => isMobileBreakpoint
+String getNameOfBranch(bool isMobileBreakpoint, int index) => isMobileBreakpoint
     ? ['home', 'settings'][index]
-    : ['home', if (showProfilesAction) 'profiles', 'settings', 'logs', 'about'][index];
+    : ['home', 'settings', 'logs', 'about'][index];
 
-int getIndexOfBranch(bool isMobileBreakpoint, bool showProfilesAction, String name) => isMobileBreakpoint
+int getIndexOfBranch(bool isMobileBreakpoint, String name) => isMobileBreakpoint
     ? ['home', 'settings'].indexOf(name)
-    : ['home', if (showProfilesAction) 'profiles', 'settings', 'logs', 'about'].indexOf(name);
+    : ['home', 'settings', 'logs', 'about'].indexOf(name);
 
 @Riverpod(keepAlive: true)
 class RoutingConfigNotifier extends _$RoutingConfigNotifier {
   @override
   RoutingConfig build() {
     final isMobileBreakpoint = ref.watch(isMobileBreakpointProvider);
-    final bool showProfilesAction;
-    if (isMobileBreakpoint == true) {
-      showProfilesAction = false;
-    } else {
-      showProfilesAction = ref.watch(hasAnyProfileProvider).value ?? false;
-    }
     if (isMobileBreakpoint == null) return loadingConfig;
     return RoutingConfig(
       redirect: (context, state) {
+        if (state.matchedLocation == '/profiles' || state.matchedLocation.startsWith('/profiles/')) {
+          return '/home';
+        }
         // fix path-parameters for deep link
         String? url;
         if (LinkParser.protocols.contains(state.uri.scheme)) {
@@ -88,18 +82,9 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
         } else if (state.matchedLocation == '/intro') {
           // Intro is completed
           // Current page in '/intro'
-          if (url != null && Uri.parse(url).host == 'import') {
-            WidgetsBinding.instance.addPostFrameCallback(
-              (_) =>
-                  ref.read(bottomSheetsNotifierProvider.notifier).showAddProfile(url: url, triggeredByDeepLink: true),
-            );
-          }
           return '/home';
         } else if (url != null && Uri.parse(url).host == 'import') {
-          // Auto import profile from url
-          WidgetsBinding.instance.addPostFrameCallback(
-            (_) => ref.read(bottomSheetsNotifierProvider.notifier).showAddProfile(url: url, triggeredByDeepLink: true),
-          );
+          // Profile import by deep link is disabled in the zero-touch build.
           return '/home';
         } else if (url != null) {
           final uri = Uri.parse(url);
@@ -117,7 +102,6 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
           builder: (_, _, navigationShell) => MyAdaptiveLayout(
             navigationShell: navigationShell,
             isMobileBreakpoint: isMobileBreakpoint,
-            showProfilesAction: showProfilesAction,
           ),
           branches: <StatefulShellBranch>[
             StatefulShellBranch(
@@ -133,41 +117,19 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
                       pageBuilder: (_, state) =>
                           customTransition(TransitionType.fade, state.pageKey, const ProxiesOverviewPage()),
                     ),
-                    if (isMobileBreakpoint)
-                      GoRoute(
-                        name: 'profileDetails',
-                        path: 'profile-details/:id',
-                        pageBuilder: (_, state) => customTransition(
-                          TransitionType.fade,
-                          state.pageKey,
-                          ProfileDetailsPage(id: state.pathParameters['id']!),
-                        ),
+                    GoRoute(
+                      name: 'profileDetails',
+                      path: 'profile-details/:id',
+                      pageBuilder: (_, state) => customTransition(
+                        TransitionType.fade,
+                        state.pageKey,
+                        ProfileDetailsPage(id: state.pathParameters['id']!),
                       ),
+                    ),
                   ],
                 ),
               ],
             ),
-            if (showProfilesAction)
-              StatefulShellBranch(
-                routes: <GoRoute>[
-                  GoRoute(
-                    name: 'profiles',
-                    path: '/profiles',
-                    builder: (_, _) => FocusScope(node: branchesScope['profiles'], child: const ProfilesPage()),
-                    routes: <GoRoute>[
-                      GoRoute(
-                        name: 'profileDetails',
-                        path: 'profile-details/:id',
-                        pageBuilder: (_, state) => customTransition(
-                          TransitionType.fade,
-                          state.pageKey,
-                          ProfileDetailsPage(id: state.pathParameters['id']!),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
             StatefulShellBranch(
               routes: <GoRoute>[
                 GoRoute(

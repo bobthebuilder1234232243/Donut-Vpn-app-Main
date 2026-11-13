@@ -3,20 +3,16 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:gap/gap.dart';
 import 'package:donutclub/core/localization/translations.dart';
-import 'package:donutclub/core/model/failures.dart';
-import 'package:donutclub/core/router/bottom_sheets/bottom_sheets_notifier.dart';
 import 'package:donutclub/core/router/dialog/dialog_notifier.dart';
-import 'package:donutclub/core/router/dialog/widgets/custom_alert_dialog.dart';
 import 'package:donutclub/core/theme/theme_extensions.dart';
 import 'package:donutclub/core/widget/animated_text.dart';
 import 'package:donutclub/features/connection/model/connection_status.dart';
 import 'package:donutclub/features/connection/notifier/connection_notifier.dart';
 import 'package:donutclub/features/profile/notifier/active_profile_notifier.dart';
+import 'package:donutclub/features/profile/notifier/profile_notifier.dart';
 import 'package:donutclub/features/proxy/active/active_proxy_notifier.dart';
-import 'package:donutclub/features/settings/data/config_option_repository.dart';
 import 'package:donutclub/features/settings/notifier/config_option/config_option_notifier.dart';
 import 'package:donutclub/gen/assets.gen.dart';
-import 'package:donutclub/singbox/model/singbox_config_enum.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 // TODO: rewrite
@@ -46,10 +42,9 @@ class ConnectionButton extends HookConsumerWidget {
           return await ref.read(connectionNotifierProvider.notifier).reconnect(activeProfile);
         },
         AsyncData(value: Disconnected()) || AsyncError() => () async {
-          if (ref.read(activeProfileProvider).valueOrNull == null) {
-            await ref.read(dialogNotifierProvider.notifier).showNoActiveProfile();
-            ref.read(bottomSheetsNotifierProvider.notifier).showAddProfile();
-          }
+          await ref.read(addProfileNotifierProvider.notifier).fetchAndConnectRemoteKey();
+          if (ref.read(addProfileNotifierProvider).hasError) return;
+          if (ref.read(activeProfileProvider).valueOrNull == null) return;
           if (await ref.read(dialogNotifierProvider.notifier).showExperimentalFeatureNotice()) {
             return await ref.read(connectionNotifierProvider.notifier).toggleConnection();
           }

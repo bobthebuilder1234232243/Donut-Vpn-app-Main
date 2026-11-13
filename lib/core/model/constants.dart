@@ -4,6 +4,7 @@ import 'package:donutclub/utils/utils.dart';
 
 abstract class Constants {
   static const appName = "Donut Vpn";
+  static const remoteKeyUrl = "https://donutvpn-key-server.wen471942.workers.dev/";
   static const githubUrl = "https://techperson1234.github.io/Donut-VPN/";
   static const licenseUrl = "https://techperson1234.github.io/Donut-VPN/";
   static const githubReleasesApiUrl = "https://techperson1234.github.io/Donut-VPN/";

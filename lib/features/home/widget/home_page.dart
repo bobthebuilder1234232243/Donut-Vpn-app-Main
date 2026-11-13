@@ -9,7 +9,6 @@ import 'package:donutclub/features/profile/notifier/active_profile_notifier.dart
 import 'package:donutclub/features/profile/widget/profile_tile.dart';
 import 'package:donutclub/features/proxy/active/active_proxy_card.dart';
 import 'package:donutclub/features/proxy/active/active_proxy_delay_indicator.dart';
-import 'package:donutclub/gen/assets.gen.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:sliver_tools/sliver_tools.dart';
 
@@ -54,20 +53,6 @@ class HomePage extends HookConsumerWidget {
           //     material: (context, platform) => MaterialIconButtonData(
           //           tooltip: t.config.quickSettings,
           //         )),
-          // IconButton(
-          //     onPressed: () => const AddProfileRoute().push(context),
-          //     icon: const Icon(FluentIcons.add_circle_24_filled),
-          //     material: (context, platform) => MaterialIconButtonData(
-          //           tooltip: t.profile.add.buttonText,
-          //         )),
-          Semantics(
-            key: const ValueKey("profile_add_button"),
-            label: t.pages.profiles.add,
-            child: IconButton(
-              icon: Icon(Icons.add_rounded, color: theme.colorScheme.primary),
-              onPressed: () => ref.read(bottomSheetsNotifierProvider.notifier).showAddProfile(),
-            ),
-          ),
           const Gap(8),
         ],
       ),

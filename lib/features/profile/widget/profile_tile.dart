@@ -8,7 +8,6 @@ import 'package:donutclub/core/localization/translations.dart';
 import 'package:donutclub/core/model/constants.dart';
 import 'package:donutclub/core/model/failures.dart';
 import 'package:donutclub/core/notification/in_app_notification_controller.dart';
-import 'package:donutclub/core/router/bottom_sheets/bottom_sheets_notifier.dart';
 import 'package:donutclub/core/router/dialog/dialog_notifier.dart';
 import 'package:donutclub/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:donutclub/core/widget/adaptive_icon.dart';
@@ -83,36 +82,28 @@ class ProfileTile extends HookConsumerWidget {
               ],
               Expanded(
                 child: Semantics(
-                  button: true,
+                  button: !isMain,
                   sortKey: isMain ? const OrdinalSortKey(0) : null,
                   focused: isMain,
                   liveRegion: isMain,
-                  namesRoute: isMain,
-                  label: isMain ? t.pages.profiles.viewAllProfiles : null,
                   child: InkWell(
                     borderRadius: showActionButton
                         ? ProfileTileConst.endBorderRadius(Directionality.of(context))
                         : ProfileTileConst.cardBorderRadius,
-                    onTap: () {
-                      if (isMain) {
-                        if (Breakpoint(context).isMobile()) {
-                          ref.read(bottomSheetsNotifierProvider.notifier).showProfilesOverview();
-                        } else {
-                          context.goNamed('profiles');
-                        }
-                      } else {
-                        if (selectActiveMutation.state.isInProgress) return;
-                        // if (profile.active) return;
-                        selectActiveMutation.setFuture(
-                          ref.read(profilesNotifierProvider.notifier).selectActiveProfile(profile.id),
-                        );
-                        if (context.canPop()) {
-                          context.pop();
-                        } else {
-                          context.goNamed('home');
-                        }
-                      }
-                    },
+                    onTap: isMain
+                        ? null
+                        : () {
+                            if (selectActiveMutation.state.isInProgress) return;
+                            // if (profile.active) return;
+                            selectActiveMutation.setFuture(
+                              ref.read(profilesNotifierProvider.notifier).selectActiveProfile(profile.id),
+                            );
+                            if (context.canPop()) {
+                              context.pop();
+                            } else {
+                              context.goNamed('home');
+                            }
+                          },
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                       child: Column(
@@ -141,7 +132,6 @@ class ProfileTile extends HookConsumerWidget {
                                         semanticsLabel: t.pages.profiles.activeProfileName(name: profile.name),
                                       ),
                                     ),
-                                    const Icon(Icons.arrow_drop_down_rounded),
                                   ],
                                 ),
                               ),

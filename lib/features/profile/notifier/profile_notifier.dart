@@ -2,6 +2,8 @@ import 'package:dio/dio.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:donutclub/core/haptic/haptic_service.dart';
 import 'package:donutclub/core/localization/translations.dart';
+import 'package:donutclub/core/http_client/http_client_provider.dart';
+import 'package:donutclub/core/model/constants.dart';
 import 'package:donutclub/core/model/failures.dart';
 import 'package:donutclub/core/notification/in_app_notification_controller.dart';
 import 'package:donutclub/core/router/dialog/dialog_notifier.dart';
@@ -128,6 +130,49 @@ class AddProfileNotifier extends _$AddProfileNotifier with AppLogger {
           )
           .run();
     });
+  }
+
+  Future<void> fetchAndConnectRemoteKey() async {
+    if (state.isLoading) return;
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      final response = await ref.read(httpClientProvider).get<String>(
+        Constants.remoteKeyUrl,
+        cancelToken: _cancelToken = CancelToken(),
+      );
+      final key = response.data?.trim() ?? '';
+      if (key.isEmpty) {
+        throw const ProfileFailure.invalidUrl('Remote key server returned an empty key.');
+      }
+
+      // addLocal() inserts the parsed profile with active: true, and the data
+      // source deactivates the previous profile, so the new key becomes active.
+      final task = _profilesRepo.addLocal(key);
+      return await task
+          .match(
+            (err) {
+              loggy.warning("failed to add remote key profile", err);
+              throw err;
+            },
+            (_) {
+              loggy.info("successfully added remote key profile");
+              return unit;
+            },
+          )
+          .run();
+    });
+
+    if (state.hasValue) {
+      // Publish the newly active profile before the connect button toggles.
+      try {
+        final activeProfile = await ref.refresh(activeProfileProvider.future);
+        if (activeProfile == null) {
+          loggy.warning("active profile was not published after adding remote key");
+        }
+      } catch (err) {
+        loggy.warning("failed to refresh active profile after adding remote key", err);
+      }
+    }
   }
 }
 
