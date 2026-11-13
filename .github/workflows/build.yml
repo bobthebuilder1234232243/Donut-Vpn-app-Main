@@ -81,7 +81,6 @@ jobs:
             FILENAME=${!KEY}
             mv dist/*/*.$EXT tmp_out/${FILENAME}.$EXT
             [[ "$EXT" != "gz" ]] && chmod +x tmp_out/${FILENAME}.$EXT || echo "Skipping chmod for gz"
-            cp ./.github/help/linux/* tmp_out/
             cd tmp_out
             mv ${FILENAME}.$EXT ../out/
             cd ..
