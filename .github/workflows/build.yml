@@ -73,8 +73,8 @@ jobs:
       - name: Install Android SDK packages
         if: matrix.target == 'apk'
         run: |
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358" > /dev/null
+          yes | flutter doctor --android-licenses || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358" > /dev/null || true
 
       - name: Prepare Android
         if: matrix.target == 'apk'
@@ -133,6 +133,8 @@ jobs:
 
       - name: Build Linux packages
         if: contains(matrix.target, 'deb')
+        env:
+          CXXFLAGS: "-Wno-error=deprecated-declarations"
         run: make linux-amd64-release
 
       - name: Upload Linux packages
@@ -177,7 +179,7 @@ jobs:
         run: |
           export PATH="$PATH:$HOME/.pub-cache/bin"
           export PATH="$PATH:$(cygpath -u "${APPDATA:-$HOME/AppData/Roaming}")/Pub/Cache/bin"
-          export PATH="$PATH:$(cygpath -u "${LOCALAPPDATA:-$HOME/AppData/Local}")/Pub/Cache/bin"
+          dart pub global activate fastforge
           TARGET=lib/main.dart
           if [ "$CHANNEL" = "prod" ]; then
             TARGET=lib/main_prod.dart
