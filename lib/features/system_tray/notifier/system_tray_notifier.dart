@@ -24,11 +24,17 @@ class SystemTrayNotifier extends _$SystemTrayNotifier with TrayListener, AppLogg
   @override
   Future<void> build() async {
     assert(PlatformUtils.isDesktop);
-    if (!listenerAdded) {
-      trayManager.addListener(this);
-      listenerAdded = true;
+    try {
+      if (!listenerAdded) {
+        trayManager.addListener(this);
+        listenerAdded = true;
+      }
+      await _initializeTray();
+    } catch (error, stackTrace) {
+      // Tray support is optional. Some Linux desktops do not provide a
+      // compatible tray host, so continue without failing app startup.
+      loggy.warning("system tray unavailable; continuing without it", error, stackTrace);
     }
-    await _initializeTray();
   }
 
   Future<void> _initializeTray() async {

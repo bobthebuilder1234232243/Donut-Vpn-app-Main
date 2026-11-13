@@ -467,7 +467,7 @@ ios-release: #not tested
 
 android-libs:
 	$(MKDIR) $(ANDROID_OUT) || echo Folder already exists. Skipping...
-	curl -L $(CORE_URL)/$(CORE_NAME)-android.tar.gz | tar xz -C $(ANDROID_OUT)/
+	curl -L $(CORE_URL)/$(CORE_NAME)-android-arm64.tar.gz | tar xz -C $(ANDROID_OUT)/
 
 android-apk-libs: android-libs
 android-aab-libs: android-libs
@@ -497,12 +497,12 @@ linux-arm64-musl-libs:
 
 macos-libs:
 	mkdir -p  $(DESKTOP_OUT) 
-	curl -L $(CORE_URL)/$(CORE_NAME)-macos.tar.gz | tar xz -C $(DESKTOP_OUT)
+	curl -L $(CORE_URL)/$(CORE_NAME)-darwin-arm64.tar.gz | tar xz -C $(DESKTOP_OUT)
 
 ios-libs: #not tested
 	mkdir -p $(IOS_OUT)
 	rm -rf $(IOS_OUT)/DonutCore.xcframework
-	curl -L $(CORE_URL)/$(CORE_NAME)-ios.tar.gz | tar xz -C "$(IOS_OUT)"
+	curl -L $(CORE_URL)/$(CORE_NAME)-ios-arm64.tar.gz | tar xz -C "$(IOS_OUT)"
 
 get-geo-assets:
 	echo ""

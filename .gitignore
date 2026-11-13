@@ -61,6 +61,11 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Android signing secrets
+android/key.properties
+*.keystore
+*.jks
+
 
 /data
 .cxx

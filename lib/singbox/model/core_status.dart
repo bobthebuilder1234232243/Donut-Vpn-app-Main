@@ -62,6 +62,7 @@ sealed class CoreStatus with _$CoreStatus {
         };
         return CoreStatus.stopped(alert: alert, message: event.message);
       case CoreStates.STARTING:
+      case CoreStates.WAITING:
         return const CoreStarting();
       case CoreStates.STARTED:
         return const CoreStarted();

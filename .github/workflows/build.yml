@@ -1,4 +1,5 @@
 name: Build app
+
 on:
   workflow_dispatch:
   workflow_call:
@@ -17,101 +18,273 @@ env:
   IS_GITHUB_ACTIONS: 1
   CHANNEL: "${{ inputs.channel }}"
   FLUTTER_VERSION: '3.38.5'
-  UPLOAD_ARTIFACT: "${{ inputs.upload-artifact }}"
-  TAG_NAME: "${{ inputs.tag-name }}"
-  TARGET_NAME_deb: "Donut-Vpn-Debian-x64"
+  SENTRY_DSN: "${{ secrets.SENTRY_DSN }}"
 
 jobs:
-  test:
-    outputs:
-      draftBuildCode: ${{ steps.draftBuildCode.outputs.datetime }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: subosito/flutter-action@v2.21.0
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: 'stable'
-          cache: true
-      - name: Prepare
-        run: make linux-amd64-prepare
-      - name: Test
-        run: flutter test
-      - name: make draftBuildCode
-        id: draftBuildCode
-        run: echo "::set-output name=datetime::$(date +'%d.%H.%M')"
-
   build:
-    needs: test
-    permissions: write-all
-    continue-on-error: true
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: linux
-            os: ubuntu-22.04
-            aarch: amd64
-            targets: deb
-    runs-on: ${{ matrix.os }}
+          - name: Android APK
+            os: ubuntu-latest
+            target: apk
+          - name: Linux DEB and AppImage
+            os: ubuntu-latest
+            target: "deb,appimage"
+          - name: Windows EXE
+            os: windows-latest
+            target: exe
+          - name: macOS DMG and iOS IPA
+            os: macos-latest
+            target: "macos,ios"
+
     steps:
-      - name: checkout
-        uses: actions/checkout@v6
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Setup Flutter
-        uses: subosito/flutter-action@v2.21.0
+        uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: 'stable'
           cache: true
-      - name: Setup dependencies
-        run: |
-          make ${{ matrix.platform }}-install-deps
-          echo "$HOME/.pub-cache/bin" >> $GITHUB_PATH
-      - name: Prepare for ${{ matrix.platform }}
-        run: make ${{ matrix.platform }}-prepare
-      - name: Build ${{ matrix.platform }}
-        run: make ${{ matrix.platform }}-release
-      - name: Copy to out unix
-        run: |
-          ls -R dist/
-          mkdir out
-          mkdir tmp_out
-          for EXT in $(echo ${{ matrix.targets }} | tr ',' '\n'); do
-            KEY=TARGET_NAME_${EXT}
-            FILENAME=${!KEY}
-            mv dist/*/*.$EXT tmp_out/${FILENAME}.$EXT
-            [[ "$EXT" != "gz" ]] && chmod +x tmp_out/${FILENAME}.$EXT || echo "Skipping chmod for gz"
-            cd tmp_out
-            mv ${FILENAME}.$EXT ../out/
-            cd ..
-          done
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v6
+
+      # ---------------------------------------------------------------------
+      # Android
+      # ---------------------------------------------------------------------
+      - name: Setup Java
+        if: matrix.target == 'apk'
+        uses: actions/setup-java@v4
         with:
-          name: donut-deb
-          path: ./out
-          retention-days: 7
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        if: matrix.target == 'apk'
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358" > /dev/null
+
+      - name: Prepare Android
+        if: matrix.target == 'apk'
+        run: make android-apk-prepare
+
+      - name: Upload Android core
+        if: matrix.target == 'apk'
+        uses: actions/upload-artifact@v4
+        with:
+          name: donut-vpn-core-android
+          path: android/app/libs/**/*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Decode Keystore and Create key.properties
+        if: matrix.target == 'apk'
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/release.keystore
+          echo "storePassword=${{ secrets.STORE_PASS }}" > android/key.properties
+          echo "keyPassword=${{ secrets.KEY_PASS }}" >> android/key.properties
+          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
+          echo "storeFile=release.keystore" >> android/key.properties
+
+      - name: Build Android APK
+        if: matrix.target == 'apk'
+        run: flutter build apk --release
+
+      - name: Upload Android APK
+        if: matrix.target == 'apk'
+        uses: actions/upload-artifact@v4
+        with:
+          name: donut-vpn-apk
+          path: build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      # ---------------------------------------------------------------------
+      # Linux
+      # ---------------------------------------------------------------------
+      - name: Install Linux dependencies
+        if: contains(matrix.target, 'deb')
+        run: make linux-amd64-install-deps
+
+      - name: Prepare Linux
+        if: contains(matrix.target, 'deb')
+        run: make linux-amd64-prepare
+
+      - name: Upload Linux core
+        if: contains(matrix.target, 'deb')
+        uses: actions/upload-artifact@v4
+        with:
+          name: donut-vpn-core-linux
+          path: donutvpn-core/bin/**/*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Build Linux packages
+        if: contains(matrix.target, 'deb')
+        run: make linux-amd64-release
+
+      - name: Upload Linux packages
+        if: contains(matrix.target, 'deb')
+        uses: actions/upload-artifact@v4
+        with:
+          name: donut-vpn-linux
+          path: |
+            dist/**/*.deb
+            dist/**/*.AppImage
+            dist/**/*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+      # ---------------------------------------------------------------------
+      # Windows
+      # ---------------------------------------------------------------------
+      - name: Install Windows build tools
+        if: matrix.target == 'exe'
+        shell: bash
+        run: |
+          choco install make innosetup -y --no-progress
+          dart pub global activate fastforge
+
+      - name: Prepare Windows
+        if: matrix.target == 'exe'
+        shell: bash
+        run: make windows-prepare
+
+      - name: Upload Windows core
+        if: matrix.target == 'exe'
+        uses: actions/upload-artifact@v4
+        with:
+          name: donut-vpn-core-windows
+          path: donutvpn-core/bin/**/*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Build Windows EXE
+        if: matrix.target == 'exe'
+        shell: bash
+        run: |
+          TARGET=lib/main.dart
+          if [ "$CHANNEL" = "prod" ]; then
+            TARGET=lib/main_prod.dart
+          fi
+          dart pub global run fastforge package \
+            --platform windows \
+            --targets exe \
+            --skip-clean \
+            --build-target="$TARGET" \
+            --build-dart-define=sentry_dsn="$SENTRY_DSN"
+
+      - name: Upload Windows EXE
+        if: matrix.target == 'exe'
+        uses: actions/upload-artifact@v4
+        with:
+          name: donut-vpn-windows
+          path: dist/**/*.exe
+          if-no-files-found: error
+          retention-days: 14
+
+      # ---------------------------------------------------------------------
+      # macOS
+      # ---------------------------------------------------------------------
+      - name: Prepare macOS
+        if: contains(matrix.target, 'macos')
+        run: make macos-prepare
+
+      - name: Upload macOS core
+        if: contains(matrix.target, 'macos')
+        uses: actions/upload-artifact@v4
+        with:
+          name: donut-vpn-core-macos
+          path: donutvpn-core/bin/**/*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Build macOS
+        if: contains(matrix.target, 'macos')
+        run: flutter build macos --release
+
+      - name: Package macOS DMG
+        if: contains(matrix.target, 'macos')
+        run: |
+          APP_PATH=$(find build/macos/Build/Products/Release -maxdepth 1 -name "*.app" -type d | head -n 1)
+          test -n "$APP_PATH"
+          hdiutil create -volname "DonutVpn" -srcfolder "$APP_PATH" -ov -format UDZO Donut-Vpn-macOS.dmg
+
+      - name: Upload macOS DMG
+        if: contains(matrix.target, 'macos')
+        uses: actions/upload-artifact@v4
+        with:
+          name: donut-vpn-macos
+          path: Donut-Vpn-macOS.dmg
+          if-no-files-found: error
+          retention-days: 14
+
+      # ---------------------------------------------------------------------
+      # iOS (unsigned; macOS runner)
+      # ---------------------------------------------------------------------
+      - name: Prepare iOS
+        if: contains(matrix.target, 'ios')
+        continue-on-error: true
+        run: |
+          make ios-libs
+          cd ios
+          pod install --repo-update
+
+      - name: Upload iOS core
+        if: always() && contains(matrix.target, 'ios')
+        uses: actions/upload-artifact@v4
+        with:
+          name: donut-vpn-core-ios
+          path: ios/Frameworks/DonutCore.xcframework/**/*
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Build unsigned iOS app
+        if: contains(matrix.target, 'ios')
+        continue-on-error: true
+        run: flutter build ios --release --no-codesign
+
+      - name: Package Unsigned IPA
+        if: always() && contains(matrix.target, 'ios')
+        run: |
+          if [ -d build/ios/iphoneos/Runner.app ]; then
+            rm -rf Payload
+            mkdir -p Payload
+            cp -R build/ios/iphoneos/Runner.app Payload/
+            zip -r Donut-Vpn-iOS-unsigned.ipa Payload
+          else
+            echo "No unsigned iOS app was produced; skipping IPA packaging."
+          fi
+
+      - name: Upload iOS IPA
+        if: always() && contains(matrix.target, 'ios')
+        uses: actions/upload-artifact@v4
+        with:
+          name: donut-vpn-ios-ipa
+          path: Donut-Vpn-iOS-unsigned.ipa
+          if-no-files-found: warn
+          retention-days: 14
 
   update-draft:
-    permissions: write-all
+    name: Update draft release
+    permissions:
+      contents: write
     if: ${{ inputs.upload-artifact }}
     needs: [build]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
         with:
-          fetch-depth: 0
-      - uses: actions/download-artifact@v7
-        with:
+          path: ./out
           merge-multiple: true
-          pattern: "*"
-          path: ./out/
-      - name: Delete Current Release Assets
-        uses: 8Mi-Tech/delete-release-assets-action@main
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          tag: 'draft'
-          deleteOnlyFromDrafts: false
+
       - name: Create or Update Draft Release
         uses: softprops/action-gh-release@v2
         env:

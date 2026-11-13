@@ -13,7 +13,6 @@ import 'package:donutclub/core/router/go_router/go_router_notifier.dart';
 import 'package:donutclub/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:donutclub/core/theme/app_theme.dart';
 import 'package:donutclub/core/theme/theme_preferences.dart';
-import 'package:donutclub/features/app_update/notifier/app_update_notifier.dart';
 import 'package:donutclub/features/connection/widget/connection_wrapper.dart';
 import 'package:donutclub/features/per_app_proxy/overview/per_app_proxy_service_notifier.dart';
 import 'package:donutclub/features/shortcut/shortcut_wrapper.dart';
@@ -23,7 +22,6 @@ import 'package:donutclub/donutcore/donut_core_service_provider.dart';
 import 'package:donutclub/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:toastification/toastification.dart';
-import 'package:upgrader/upgrader.dart';
 
 bool _debugAccessibility = false;
 bool isOnPauseCalled = false;
@@ -58,7 +56,6 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
     final locale = ref.watch(localePreferencesProvider);
     final themeMode = ref.watch(themePreferencesProvider);
     final theme = AppTheme(themeMode, locale.preferredFontFamily);
-    final upgrader = ref.watch(upgraderProvider);
     final activeBreakpoint = Breakpoint(context).activeBreakpoint;
 
     if (PlatformUtils.isAndroid) ref.listen(perAppProxyServiceProvider, (_, _) {});
@@ -89,13 +86,12 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
                   title: Constants.appName,
                   builder: (context, child) {
                     final theme = Theme.of(context);
-                    child = UpgradeAlert(
-                      upgrader: upgrader,
-                      navigatorKey: router.routerDelegate.navigatorKey,
-                      child: child ?? const SizedBox(),
-                    );
+                    final content = child ?? const SizedBox.shrink();
+                    // The configured appcast URL points at an HTML page, which
+                    // made Upgrader throw XmlTagException while parsing it.
+                    // Automatic upgrade checks are intentionally disabled.
                     if (kDebugMode && _debugAccessibility) {
-                      return AccessibilityTools(checkFontOverflows: true, child: child);
+                      return AccessibilityTools(checkFontOverflows: true, child: content);
                     }
                     return AnnotatedRegion<SystemUiOverlayStyle>(
                       value: SystemUiOverlayStyle(
@@ -105,7 +101,7 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
                             ? Brightness.light
                             : Brightness.dark,
                       ),
-                      child: child,
+                      child: content,
                     );
                   },
                 );
