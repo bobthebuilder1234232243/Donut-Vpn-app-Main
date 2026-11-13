@@ -180,16 +180,7 @@ jobs:
           export PATH="$PATH:$HOME/.pub-cache/bin"
           export PATH="$PATH:$(cygpath -u "${APPDATA:-$HOME/AppData/Roaming}")/Pub/Cache/bin"
           dart pub global activate fastforge
-          TARGET=lib/main.dart
-          if [ "$CHANNEL" = "prod" ]; then
-            TARGET=lib/main_prod.dart
-          fi
-          fastforge package \
-            --platform windows \
-            --targets exe \
-            --skip-clean \
-            --build-target="$TARGET" \
-            --build-dart-define=sentry_dsn="$SENTRY_DSN"
+          make windows-exe-release
 
       - name: Upload Windows EXE
         if: matrix.target == 'exe'

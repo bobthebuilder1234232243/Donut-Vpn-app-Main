@@ -15,5 +15,8 @@ class ProxyService :
 
     override fun onDestroy() = service.onDestroy()
 
+    override fun cancelNotification(identifier: String, typeID: Int) {
+    }
+
     override fun sendNotification(notification: Notification) = service.sendNotification(notification)
 }

@@ -25,8 +25,15 @@ import com.donutvpn.core.libbox.NetworkInterface as LibboxNetworkInterface
 
 
 import android.system.OsConstants
+import com.donutvpn.core.libbox.AutoRedirectHandler
+import com.donutvpn.core.libbox.AutoRedirectSession
+import com.donutvpn.core.libbox.BridgeOptions
+import com.donutvpn.core.libbox.BridgeSession
 import com.donutvpn.core.libbox.ConnectionOwner
 import com.donutvpn.core.libbox.LocalDNSTransport
+import com.donutvpn.core.libbox.NeighborUpdateListener
+import com.donutvpn.core.libbox.PlatformUser
+import com.donutvpn.core.libbox.ShellSession
 import java.security.KeyStore
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
@@ -41,7 +48,7 @@ interface PlatformInterfaceWrapper : PlatformInterface {
         error("invalid argument")
     }
 
-    override fun useProcFS(): Boolean =  Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
+    fun useProcFS(): Boolean =  Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
 
     @RequiresApi(Build.VERSION_CODES.Q)
     override fun findConnectionOwner(
@@ -65,7 +72,8 @@ interface PlatformInterfaceWrapper : PlatformInterface {
             if (uid!=Process.INVALID_UID) {
                 val packages = Application.packageManager.getPackagesForUid(uid)
                 owner.userName = packages?.firstOrNull() ?: ""
-                owner.androidPackageName = owner.userName
+                owner.androidPackageNames =
+                    StringArray(packages?.iterator() ?: emptyList<String>().iterator())
             }
             return owner
         } catch (e: Exception) {
@@ -146,6 +154,48 @@ interface PlatformInterfaceWrapper : PlatformInterface {
 
     override fun clearDNSCache() {
     }
+
+    override fun checkPlatformShell() {
+    }
+
+    override fun closeNeighborMonitor(listener: NeighborUpdateListener) {
+    }
+
+    override fun createAutoRedirect(
+        key: ByteArray,
+        handler: AutoRedirectHandler,
+    ): AutoRedirectSession? = null
+
+    override fun createBridge(options: BridgeOptions): BridgeSession? = null
+
+    override fun lookupSFTPServer(): String = ""
+
+    override fun lookupUser(username: String): PlatformUser? = null
+
+    override fun openShellSession(
+        user: PlatformUser,
+        command: String,
+        args: StringIterator,
+        workingDirectory: String,
+        rows: Int,
+        cols: Int,
+    ): ShellSession? = null
+
+    override fun readSystemSSHHostKey(): String = ""
+
+    override fun registerMyInterface(name: String) {
+    }
+
+    override fun startNeighborMonitor(listener: NeighborUpdateListener) {
+    }
+
+    override fun tailscaleHostname(): String = ""
+
+    override fun usePlatformAutoRedirect(): Boolean = false
+
+    override fun usePlatformBridge(): Boolean = false
+
+    override fun usePlatformShell(): Boolean = false
 
     override fun readWIFIState(): WIFIState? {
         @Suppress("DEPRECATION")
