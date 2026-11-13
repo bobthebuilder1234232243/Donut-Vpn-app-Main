@@ -1,11 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:donutclub/core/localization/translations.dart';
 import 'package:donutclub/core/model/constants.dart';
 import 'package:donutclub/core/router/bottom_sheets/widgets/quick_settings_modal.dart';
-import 'package:donutclub/core/router/dialog/dialog_notifier.dart';
 import 'package:donutclub/core/router/go_router/go_router_notifier.dart';
-import 'package:donutclub/features/profile/add/add_profile_modal.dart';
-import 'package:donutclub/features/profile/overview/profiles_modal.dart';
 import 'package:donutclub/features/route_rules/overview/predefined_rules_modal.dart';
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -42,26 +38,6 @@ class BottomSheetsNotifier extends _$BottomSheetsNotifier {
           return value;
         });
   }
-
-  Future<void> showAddProfile({String? url, bool triggeredByDeepLink = false}) async {
-    if (url != null && triggeredByDeepLink) {
-      // Preventing Zero-click SSRF
-      final t = ref.watch(translationsProvider).requireValue;
-      final isConfirmed = await ref
-          .read(dialogNotifierProvider.notifier)
-          .showConfirmation(
-            title: t.dialogs.confirmation.addProfileByDeepLinkWarning.title,
-            message: t.dialogs.confirmation.addProfileByDeepLinkWarning.message(host: Uri.parse(url).host),
-          );
-      if (isConfirmed) {
-        await _show(isScrollControlled: true, child: AddProfileModal(url: url));
-      }
-    } else {
-      await _show(isScrollControlled: true, child: AddProfileModal(url: url));
-    }
-  }
-
-  Future<void> showProfilesOverview() async => await _show(isScrollControlled: true, child: const ProfilesModal());
 
   Future<void> showQuickSettings() async => await _show(isScrollControlled: false, child: const QuickSettingsModal());
 

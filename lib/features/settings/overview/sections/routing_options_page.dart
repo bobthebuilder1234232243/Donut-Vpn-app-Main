@@ -328,7 +328,7 @@ class _ExpandableFabState extends State<_ExpandableFab> with SingleTickerProvide
                       animation: _controller,
                       builder: (context, _) => Transform.rotate(
                         angle: _controller.value * 0.75 * 3.14159,
-                        child: const Icon(Icons.add_rounded),
+                        child: const Icon(Icons.tune_rounded),
                       ),
                     ),
                   )
@@ -338,7 +338,7 @@ class _ExpandableFabState extends State<_ExpandableFab> with SingleTickerProvide
                       animation: _controller,
                       builder: (context, _) => Transform.rotate(
                         angle: _controller.value * 0.75 * 3.14159,
-                        child: const Icon(Icons.add_rounded),
+                        child: const Icon(Icons.tune_rounded),
                       ),
                     ),
                   ),

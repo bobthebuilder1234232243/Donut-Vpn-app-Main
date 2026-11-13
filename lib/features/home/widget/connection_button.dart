@@ -43,11 +43,7 @@ class ConnectionButton extends HookConsumerWidget {
         },
         AsyncData(value: Disconnected()) || AsyncError() => () async {
           await ref.read(addProfileNotifierProvider.notifier).fetchAndConnectRemoteKey();
-          if (ref.read(addProfileNotifierProvider).hasError) return;
-          if (ref.read(activeProfileProvider).valueOrNull == null) return;
-          if (await ref.read(dialogNotifierProvider.notifier).showExperimentalFeatureNotice()) {
-            return await ref.read(connectionNotifierProvider.notifier).toggleConnection();
-          }
+          return await ref.read(connectionNotifierProvider.notifier).toggleConnection();
         },
         AsyncData(value: Connected()) => () async {
           if (requiresReconnect == true &&

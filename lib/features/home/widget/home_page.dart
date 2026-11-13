@@ -113,10 +113,6 @@ class HomePage extends HookConsumerWidget {
                         ),
                       ],
                     ),
-                    // AsyncData() => switch (hasAnyProfile) {
-                    //     AsyncData(value: true) => const EmptyActiveProfileHomeBody(),
-                    //     _ => const EmptyProfilesHomeBody(),
-                    //   },
                     // AsyncError(:final error) => SliverErrorBodyPlaceholder(t.presentShortError(error)),
                     // _ => const SliverToBoxAdapter(),
                     // },
