@@ -2,6 +2,10 @@
 cmake_minimum_required(VERSION 3.10)
 project(runner LANGUAGES CXX)
 
+# tray_manager uses a GTK API deprecated in newer toolchains. Keep that warning
+# non-fatal while retaining -Werror for other warnings.
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=deprecated-declarations")
+
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
 set(BINARY_NAME "donutvpn")

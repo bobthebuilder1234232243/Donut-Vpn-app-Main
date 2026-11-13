@@ -66,6 +66,12 @@ jobs:
 
       - name: Setup Android SDK
         if: matrix.target == 'apk'
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+
+      - name: Install Android SDK packages
+        if: matrix.target == 'apk'
         run: |
           yes | sdkmanager --licenses > /dev/null || true
           sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358" > /dev/null
@@ -169,11 +175,14 @@ jobs:
         if: matrix.target == 'exe'
         shell: bash
         run: |
+          export PATH="$PATH:$HOME/.pub-cache/bin"
+          export PATH="$PATH:$(cygpath -u "${APPDATA:-$HOME/AppData/Roaming}")/Pub/Cache/bin"
+          export PATH="$PATH:$(cygpath -u "${LOCALAPPDATA:-$HOME/AppData/Local}")/Pub/Cache/bin"
           TARGET=lib/main.dart
           if [ "$CHANNEL" = "prod" ]; then
             TARGET=lib/main_prod.dart
           fi
-          dart pub global run fastforge package \
+          fastforge package \
             --platform windows \
             --targets exe \
             --skip-clean \
