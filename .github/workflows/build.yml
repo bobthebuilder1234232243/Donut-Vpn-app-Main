@@ -249,7 +249,6 @@ jobs:
 
       - name: Build unsigned iOS app
         if: contains(matrix.target, 'ios')
-        continue-on-error: true
         run: flutter build ios --release --no-codesign
 
       - name: Package Unsigned IPA

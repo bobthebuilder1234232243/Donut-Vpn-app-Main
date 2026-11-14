@@ -391,7 +391,7 @@ linux-appimage-release:
 	cp ../../assets/images/source/ic_launcher_border.png squashfs-root/usr/share/icons/hicolor/128x128/apps/donutvpn.png; \
 	cp ../../assets/images/source/ic_launcher_border.png squashfs-root/usr/share/icons/hicolor/256x256/apps/donutvpn.png; \
 	$(BLUE)Granting permissions$(DONE); \
-	chmod +x squashfs-root/AppRun; \
+	chmod a+rx squashfs-root/AppRun; \
 	$(BLUE)Updating AppImage desktop entry$(DONE); \
 	DESKTOP_FILE=$$(find squashfs-root -maxdepth 1 -name '*.desktop' | head -n 1); \
 	test -n "$$DESKTOP_FILE"; \
@@ -401,6 +401,8 @@ linux-appimage-release:
 	rm *.AppImage; \
 	$(BLUE)Deleting bundled libstdc++ to fix Arch Linux compatibility...$(DONE); \
 	find squashfs-root/usr/lib -name "libstdc++.so.6" -delete; \
+	$(BLUE)Fixing AppImage permissions$(DONE); \
+	chmod -R a+rX squashfs-root; \
 	$(BLUE)Rebuilding AppImage$(DONE); \
 	ARCH=x86_64 appimagetool --no-appstream squashfs-root DonutVpn.AppImage > /dev/null; \
 	test -s DonutVpn.AppImage; \
