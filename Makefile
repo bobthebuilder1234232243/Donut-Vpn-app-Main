@@ -379,20 +379,31 @@ linux-appimage-release:
 	--build-target=$(TARGET) \
 	--build-dart-define=sentry_dsn=$(SENTRY_DSN)
 	@$(YELLOW)Post-processing AppImage$(DONE); \
+	set -e; \
 	$(BLUE)Extracting AppImage$(DONE); \
 	cd dist/* && ./*.AppImage --appimage-extract > /dev/null; \
 	$(BLUE)Replacing AppRun$(DONE); \
 	cp ../../linux/packaging/appimage/AppRun squashfs-root/AppRun; \
+	$(BLUE)Staging AppImage icon$(DONE); \
+	cp ../../assets/images/source/ic_launcher_border.png squashfs-root/donutvpn.png; \
+	ln -sf donutvpn.png squashfs-root/.DirIcon; \
+	mkdir -p squashfs-root/usr/share/icons/hicolor/128x128/apps squashfs-root/usr/share/icons/hicolor/256x256/apps; \
+	cp ../../assets/images/source/ic_launcher_border.png squashfs-root/usr/share/icons/hicolor/128x128/apps/donutvpn.png; \
+	cp ../../assets/images/source/ic_launcher_border.png squashfs-root/usr/share/icons/hicolor/256x256/apps/donutvpn.png; \
 	$(BLUE)Granting permissions$(DONE); \
 	chmod +x squashfs-root/AppRun; \
-	$(BLUE)Adding StartupWMClass to donutvpn.desktop$(DONE); \
-	sed -i '/^\[Desktop Entry\]/a StartupWMClass=app.donutvpn.com' "squashfs-root/donutvpn.desktop"; \
+	$(BLUE)Updating AppImage desktop entry$(DONE); \
+	DESKTOP_FILE=$$(find squashfs-root -maxdepth 1 -name '*.desktop' | head -n 1); \
+	test -n "$$DESKTOP_FILE"; \
+	sed -i '/^\[Desktop Entry\]/a StartupWMClass=app.donutvpn.com' "$$DESKTOP_FILE"; \
+	sed -i 's/^Icon=.*/Icon=donutvpn/' "$$DESKTOP_FILE"; \
 	$(BLUE)Removing old AppImage$(DONE); \
 	rm *.AppImage; \
 	$(BLUE)Deleting bundled libstdc++ to fix Arch Linux compatibility...$(DONE); \
 	find squashfs-root/usr/lib -name "libstdc++.so.6" -delete; \
 	$(BLUE)Rebuilding AppImage$(DONE); \
 	ARCH=x86_64 appimagetool --no-appstream squashfs-root DonutVpn.AppImage > /dev/null; \
+	test -s DonutVpn.AppImage; \
 	$(BLUE)Cleaning up squashfs$(DONE); \
 	rm -rf squashfs-root; \
 	$(YELLOW)Creating Portable Package$(DONE); \
