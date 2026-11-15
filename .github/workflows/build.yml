@@ -109,25 +109,7 @@ jobs:
           api-level: 31
           target: default
           arch: x86_64
-          script: |
-            set -e
-            APK_PATH=$(find build/app/outputs/flutter-apk -maxdepth 1 -name "app-release.apk" -print -quit)
-            if [ -z "$APK_PATH" ]; then
-              APK_PATH=$(find build/app/outputs/flutter-apk -maxdepth 1 -name "app-x86_64-release.apk" -print -quit)
-            fi
-            if [ -z "$APK_PATH" ]; then
-              APK_PATH=$(find build/app/outputs/flutter-apk -maxdepth 1 -name "*.apk" | head -n 1)
-            fi
-            if [ -z "$APK_PATH" ]; then
-              echo "No APK found"
-              exit 1
-            fi
-            echo "Installing $APK_PATH"
-            adb install "$APK_PATH"
-            adb shell am start -n app.donutvpn.com/com.donutvpn.app.MainActivity
-            sleep 10
-            adb logcat -d > android-smoke-test.log
-            adb shell pidof app.donutvpn.com || (echo "App crashed" && exit 1)
+          script: set -e; APK_PATH=$(find build/app/outputs/flutter-apk -maxdepth 1 -name "app-release.apk" -print -quit); if [ -z "$APK_PATH" ]; then APK_PATH=$(find build/app/outputs/flutter-apk -maxdepth 1 -name "app-x86_64-release.apk" -print -quit); fi; if [ -z "$APK_PATH" ]; then APK_PATH=$(find build/app/outputs/flutter-apk -maxdepth 1 -name "*.apk" | head -n 1); fi; if [ -z "$APK_PATH" ]; then echo "No APK found"; exit 1; fi; echo "Installing $APK_PATH"; adb install "$APK_PATH"; adb shell am start -n app.donutvpn.com/com.donutvpn.app.MainActivity; sleep 10; adb logcat -d > android-smoke-test.log; adb shell pidof app.donutvpn.com || (echo "App crashed" && exit 1)
 
       - name: Upload Android smoke test log
         if: always() && matrix.target == 'apk'
