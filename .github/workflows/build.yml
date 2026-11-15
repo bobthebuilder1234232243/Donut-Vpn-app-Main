@@ -111,8 +111,18 @@ jobs:
           arch: x86_64
           script: |
             set -e
-            APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
-            test -f "$APK_PATH"
+            APK_PATH=$(find build/app/outputs/flutter-apk -maxdepth 1 -name "app-release.apk" -print -quit)
+            if [ -z "$APK_PATH" ]; then
+              APK_PATH=$(find build/app/outputs/flutter-apk -maxdepth 1 -name "app-x86_64-release.apk" -print -quit)
+            fi
+            if [ -z "$APK_PATH" ]; then
+              APK_PATH=$(find build/app/outputs/flutter-apk -maxdepth 1 -name "*.apk" | head -n 1)
+            fi
+            if [ -z "$APK_PATH" ]; then
+              echo "No APK found"
+              exit 1
+            fi
+            echo "Installing $APK_PATH"
             adb install "$APK_PATH"
             adb shell am start -n app.donutvpn.com/com.donutvpn.app.MainActivity
             sleep 10
