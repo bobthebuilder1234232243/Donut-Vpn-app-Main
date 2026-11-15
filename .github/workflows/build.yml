@@ -106,10 +106,25 @@ jobs:
         if: matrix.target == 'apk'
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 31
-          target: default
+          api-level: 35
+          target: google_apis
           arch: x86_64
-          script: set -e; APK_PATH=$(find build/app/outputs/flutter-apk -maxdepth 1 -name "app-release.apk" -print -quit); if [ -z "$APK_PATH" ]; then APK_PATH=$(find build/app/outputs/flutter-apk -maxdepth 1 -name "app-x86_64-release.apk" -print -quit); fi; if [ -z "$APK_PATH" ]; then APK_PATH=$(find build/app/outputs/flutter-apk -maxdepth 1 -name "*.apk" | head -n 1); fi; if [ -z "$APK_PATH" ]; then echo "No APK found"; exit 1; fi; echo "Installing $APK_PATH"; adb install "$APK_PATH"; adb shell am start -n app.donutvpn.com/com.donutvpn.app.MainActivity; sleep 10; adb logcat -d > android-smoke-test.log; adb shell pidof app.donutvpn.com || (echo "App crashed" && exit 1)
+          script: >-
+            set -e;
+            echo "ABI list: $(adb shell getprop ro.product.cpu.abilist)";
+            echo "Native bridge: $(adb shell getprop ro.dalvik.vm.native.bridge)";
+            APK_PATH=$(find build/app/outputs/flutter-apk -maxdepth 1 -name "app-release.apk" -print -quit);
+            if [ -z "$APK_PATH" ]; then APK_PATH=$(find build/app/outputs/flutter-apk -maxdepth 1 -name "app-arm64-v8a-release.apk" -print -quit); fi;
+            if [ -z "$APK_PATH" ]; then APK_PATH=$(find build/app/outputs/flutter-apk -maxdepth 1 -name "*.apk" | head -n 1); fi;
+            if [ -z "$APK_PATH" ]; then echo "No APK found"; exit 1; fi;
+            echo "Installing $APK_PATH";
+            adb install --abi arm64-v8a "$APK_PATH";
+            echo "Installed ABI: $(adb shell dumpsys package app.donutvpn.com | grep -m1 primaryCpuAbi || true)";
+            adb logcat -c || true;
+            adb shell am start -n app.donutvpn.com/com.donutvpn.app.MainActivity || true;
+            for i in $(seq 1 60); do if adb shell pidof app.donutvpn.com >/dev/null 2>&1; then echo "App process is running"; break; fi; sleep 2; done;
+            adb logcat -d > android-smoke-test.log;
+            adb shell pidof app.donutvpn.com || (echo "App crashed"; tail -n 300 android-smoke-test.log; exit 1)
 
       - name: Upload Android smoke test log
         if: always() && matrix.target == 'apk'
