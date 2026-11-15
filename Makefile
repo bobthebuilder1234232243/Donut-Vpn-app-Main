@@ -516,6 +516,9 @@ ios-libs: #not tested
 	mkdir -p $(IOS_OUT)
 	rm -rf $(IOS_OUT)/DonutCore.xcframework
 	curl -L $(CORE_URL)/$(CORE_NAME)-ios-arm64.tar.gz | tar xz -C "$(IOS_OUT)"
+	# The core archive contains DonutCore.framework, but its xcframework
+	# Info.plist still points at DonutVpnCore.framework.
+	@python3 -c 'import plistlib; p="$(IOS_OUT)/DonutCore.xcframework/Info.plist"; d=plistlib.load(open(p, "rb")); [lib.update(LibraryPath="DonutCore.framework", BinaryPath="DonutCore.framework/DonutCore") for lib in d["AvailableLibraries"]]; open(p, "wb").write(plistlib.dumps(d))'
 
 get-geo-assets:
 	echo ""
