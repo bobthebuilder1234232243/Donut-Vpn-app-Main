@@ -45,8 +45,8 @@ public class ExtensionPlatformInterface: NSObject, LibboxPlatformInterfaceProtoc
         if options.getAutoRoute() {
             settings.mtu = NSNumber(value: options.getMTU())
 
-           let dnsServer = try options.getDNSServerAddress()
-            let dnsServerAddress = dnsServer?.next() ?? ""
+                       let dnsServer = try options.getDNSServerAddress()
+            let dnsServerAddress = dnsServer.next()
             let dnsSettings = NEDNSSettings(servers: [dnsServerAddress, "fdfe:dcba:9876::1"])
             dnsSettings.matchDomains = [""]
             dnsSettings.matchDomainsNoSearch = true
@@ -214,10 +214,10 @@ public class ExtensionPlatformInterface: NSObject, LibboxPlatformInterfaceProtoc
         }
     }
 
-    public func usePlatformAutoDetectInterfaceControl() -> Bool {
+    public func usePlatformAutoDetectControl() -> Bool {
         false
     }
-    public func findConnectionOwner(_ ipProtocol: Int32, sourceAddress: String?, sourcePort: Int32, destinationAddress: String?, destinationPort: Int32) throws -> LibboxConnectionOwner? {
+    public func findConnectionOwner(_ ipProtocol: Int32, sourceAddress: String?, sourcePort: Int32, destinationAddress: String?, destinationPort: Int32) throws -> LibboxConnectionOwner {
         #if os(macOS)
             if Variant.useSystemExtension {
                 guard let sourceAddress, let destinationAddress else {
@@ -274,7 +274,7 @@ public class ExtensionPlatformInterface: NSObject, LibboxPlatformInterfaceProtoc
         nwMonitor = nil
     }
 
-    public func getInterfaces() throws -> LibboxNetworkInterfaceIteratorProtocol? {
+    public func getInterfaces() throws -> LibboxNetworkInterfaceIteratorProtocol {
         throw NSError(domain: "not implemented", code: 0)
         guard let nwMonitor else {
             throw NSError(domain: "ExtensionPlatformInterface", code: 0, userInfo: [NSLocalizedDescriptionKey: String(localized: "NWMonitor not started")])
@@ -454,7 +454,7 @@ public class ExtensionPlatformInterface: NSObject, LibboxPlatformInterfaceProtoc
         nwMonitor = nil
     }
 
-    public func sendNotification(_ notification: LibboxNotification?) throws {
+    public func send(_ notification: LibboxNotification?) throws {
         #if !os(tvOS)
             guard let notification else {
                 return
@@ -491,7 +491,7 @@ public class ExtensionPlatformInterface: NSObject, LibboxPlatformInterfaceProtoc
     public func systemCertificates() -> (any LibboxStringIteratorProtocol)? {
         nil
     }
-    public func autoDetectInterfaceControl(_: Int32) throws {
+    public func autoDetectControl(_: Int32) throws {
     }
 
     public func cancelNotification(_ identifier: String?, typeID: Int32) throws {
@@ -503,24 +503,24 @@ public class ExtensionPlatformInterface: NSObject, LibboxPlatformInterfaceProtoc
     public func closeNeighborMonitor(_ listener: LibboxNeighborUpdateListenerProtocol?) throws {
     }
 
-    public func createAutoRedirect(_ options: Data?, handler: LibboxAutoRedirectHandlerProtocol?) throws -> LibboxAutoRedirectSessionProtocol? {
-        nil
+    public func createAutoRedirect(_ options: Data?, handler: LibboxAutoRedirectHandlerProtocol?) throws -> LibboxAutoRedirectSessionProtocol {
+        throw notSupported("Auto redirect")
     }
 
-    public func createBridge(_ options: LibboxBridgeOptions?) throws -> LibboxBridgeSessionProtocol? {
-        nil
+    public func createBridge(_ options: LibboxBridgeOptions?) throws -> LibboxBridgeSessionProtocol {
+        throw notSupported("Bridge")
     }
 
     public func lookupSFTPServer(_ error: NSErrorPointer) -> String {
         ""
     }
 
-    public func lookupUser(_ username: String?) throws -> LibboxPlatformUser? {
-        nil
+    public func lookupUser(_ username: String?) throws -> LibboxPlatformUser {
+        throw notSupported("User lookup")
     }
 
-    public func openShellSession(_ user: LibboxPlatformUser?, command: String?, environ: LibboxStringIteratorProtocol?, term: String?, rows: Int32, cols: Int32) throws -> LibboxShellSessionProtocol? {
-        nil
+    public func openShellSession(_ user: LibboxPlatformUser?, command: String?, environ: LibboxStringIteratorProtocol?, term: String?, rows: Int32, cols: Int32) throws -> LibboxShellSessionProtocol {
+        throw notSupported("Shell session")
     }
 
     public func readSystemSSHHostKey(_ error: NSErrorPointer) -> String {
@@ -546,6 +546,10 @@ public class ExtensionPlatformInterface: NSObject, LibboxPlatformInterfaceProtoc
 
     public func usePlatformShell() -> Bool {
         false
+    }
+
+    private func notSupported(_ feature: String) -> NSError {
+        NSError(domain: "ExtensionPlatformInterface", code: 0, userInfo: [NSLocalizedDescriptionKey: "\(feature) is not supported in the packet tunnel"])
     }
 
 }
