@@ -102,6 +102,32 @@ jobs:
         if: matrix.target == 'apk'
         run: flutter build apk --release
 
+      - name: Smoke test Android APK
+        if: matrix.target == 'apk'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 31
+          target: default
+          arch: x86_64
+          script: |
+            set -e
+            APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
+            test -f "$APK_PATH"
+            adb install "$APK_PATH"
+            adb shell am start -n app.donutvpn.com/com.donutvpn.app.MainActivity
+            sleep 10
+            adb logcat -d > android-smoke-test.log
+            adb shell pidof app.donutvpn.com || (echo "App crashed" && exit 1)
+
+      - name: Upload Android smoke test log
+        if: always() && matrix.target == 'apk'
+        uses: actions/upload-artifact@v4
+        with:
+          name: donut-vpn-android-smoke-test-log
+          path: android-smoke-test.log
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Upload Android APK
         if: matrix.target == 'apk'
         uses: actions/upload-artifact@v4
@@ -136,6 +162,35 @@ jobs:
         env:
           CXXFLAGS: "-Wno-error=deprecated-declarations"
         run: make linux-amd64-release
+
+      - name: Smoke test Linux AppImage
+        if: contains(matrix.target, 'deb')
+        run: |
+          sudo apt-get install -y xvfb
+          APPIMAGE="dist/4.1.4+40104/DonutVpn.AppImage"
+          test -f "$APPIMAGE"
+          chmod +x "$APPIMAGE"
+          xvfb-run -a "$APPIMAGE" > linux-smoke-test.log 2>&1 &
+          APP_PID=$!
+          sleep 10
+          if kill -0 "$APP_PID"; then
+            echo "Linux App is running"
+            kill "$APP_PID" 2>/dev/null || true
+            wait "$APP_PID" 2>/dev/null || true
+          else
+            echo "Linux App crashed"
+            cat linux-smoke-test.log
+            exit 1
+          fi
+
+      - name: Upload Linux smoke test log
+        if: always() && contains(matrix.target, 'deb')
+        uses: actions/upload-artifact@v4
+        with:
+          name: donut-vpn-linux-smoke-test-log
+          path: linux-smoke-test.log
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Upload Linux packages
         if: contains(matrix.target, 'deb')
@@ -182,6 +237,44 @@ jobs:
           dart pub global activate fastforge
           make windows-exe-release
 
+      - name: Smoke test Windows app
+        if: matrix.target == 'exe'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          # fastforge's "exe" target is an Inno Setup installer; smoke-test the
+          # compiled app from the release bundle instead of the setup wizard.
+          $appPath = (Resolve-Path "build\windows\x64\runner\Release\DonutVpn.exe").Path
+          $appDir = Split-Path -Parent $appPath
+
+          New-Item -ItemType File -Force -Path "windows-smoke-test.log", "windows-error.log" | Out-Null
+          $proc = Start-Process -FilePath $appPath `
+            -WorkingDirectory $appDir `
+            -RedirectStandardOutput "windows-smoke-test.log" `
+            -RedirectStandardError "windows-error.log" `
+            -PassThru
+          Start-Sleep -Seconds 10
+
+          if ($proc.HasExited) {
+            Write-Error "Windows App crashed" -ErrorAction Continue
+            Get-Content "windows-smoke-test.log", "windows-error.log"
+            exit 1
+          } else {
+            Write-Host "Windows App is running"
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Upload Windows smoke test logs
+        if: always() && matrix.target == 'exe'
+        uses: actions/upload-artifact@v4
+        with:
+          name: donut-vpn-windows-smoke-test-logs
+          path: |
+            windows-smoke-test.log
+            windows-error.log
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Upload Windows EXE
         if: matrix.target == 'exe'
         uses: actions/upload-artifact@v4
@@ -217,6 +310,33 @@ jobs:
           APP_PATH=$(find build/macos/Build/Products/Release -maxdepth 1 -name "*.app" -type d | head -n 1)
           test -n "$APP_PATH"
           hdiutil create -volname "DonutVpn" -srcfolder "$APP_PATH" -ov -format UDZO Donut-Vpn-macOS.dmg
+
+      - name: Smoke test macOS app
+        if: contains(matrix.target, 'macos')
+        run: |
+          hdiutil attach Donut-Vpn-macOS.dmg
+          cp -R "/Volumes/DonutVpn/Donut VPN.app" /tmp/
+          "/tmp/Donut VPN.app/Contents/MacOS/Donut VPN" > macos-smoke-test.log 2>&1 &
+          APP_PID=$!
+          sleep 10
+          if kill -0 "$APP_PID"; then
+            echo "macOS App is running"
+            kill "$APP_PID" 2>/dev/null || true
+            wait "$APP_PID" 2>/dev/null || true
+          else
+            echo "macOS App crashed"
+            cat macos-smoke-test.log
+            exit 1
+          fi
+
+      - name: Upload macOS smoke test log
+        if: always() && contains(matrix.target, 'macos')
+        uses: actions/upload-artifact@v4
+        with:
+          name: donut-vpn-macos-smoke-test-log
+          path: macos-smoke-test.log
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Upload macOS DMG
         if: contains(matrix.target, 'macos')

@@ -134,6 +134,7 @@ dev_dependencies:
   ffigen: ^19.1.0
   slang_build_runner: ^4.4.0
   flutter_gen_runner: 5.10.0
+  flutter_launcher_icons: ^0.14.4
   dart_mappable_builder: ^4.2.1
   # protoc_builder: ^0.4.1
   # google_protobuf: ^3.20.1;
@@ -175,12 +176,29 @@ flutter_gen:
     flutter_svg: true
 
 flutter_native_splash:
-  color: "#ffffff"
-  image: assets/images/source/ic_launcher_splash.png
+  color: "#293CA0"
+  color_dark: "#10131C"
+  image: assets/images/donut_logo.png
   android_gravity: center
   android_12:
-    color: "#ffffff"
-    image: assets/images/source/ic_launcher_foreground.png
+    color: "#293CA0"
+    color_dark: "#10131C"
+    image: assets/images/source/ic_launcher_border.png
+
+flutter_launcher_icons:
+  android: "ic_launcher"
+  ios: true
+  image_path: "assets/images/source/ic_launcher_border.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/images/source/ic_launcher_border.png"
+  adaptive_icon_foreground_inset: 16
+  remove_alpha_ios: true
+  background_color_ios: "#FFFFFF"
+  windows:
+    generate: true
+    image_path: "assets/images/source/ic_launcher_border.png"
+    icon_size: 256
 
 ffigen:
   name: "DonutCoreNativeLibrary"
