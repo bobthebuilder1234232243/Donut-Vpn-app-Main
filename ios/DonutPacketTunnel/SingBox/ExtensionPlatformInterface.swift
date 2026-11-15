@@ -46,7 +46,8 @@ public class ExtensionPlatformInterface: NSObject, LibboxPlatformInterfaceProtoc
             settings.mtu = NSNumber(value: options.getMTU())
 
            let dnsServer = try options.getDNSServerAddress()
-            let dnsSettings = NEDNSSettings(servers: [dnsServer.value,"fdfe:dcba:9876::1"])
+            let dnsServerAddress = dnsServer?.next() ?? ""
+            let dnsSettings = NEDNSSettings(servers: [dnsServerAddress, "fdfe:dcba:9876::1"])
             dnsSettings.matchDomains = [""]
             dnsSettings.matchDomainsNoSearch = true
             settings.dnsSettings = dnsSettings
@@ -213,10 +214,10 @@ public class ExtensionPlatformInterface: NSObject, LibboxPlatformInterfaceProtoc
         }
     }
 
-    public func usePlatformAutoDetectControl() -> Bool {
+    public func usePlatformAutoDetectInterfaceControl() -> Bool {
         false
     }
-    public func findConnectionOwner(_ ipProtocol: Int32, sourceAddress: String?, sourcePort: Int32, destinationAddress: String?, destinationPort: Int32) throws -> LibboxConnectionOwner {
+    public func findConnectionOwner(_ ipProtocol: Int32, sourceAddress: String?, sourcePort: Int32, destinationAddress: String?, destinationPort: Int32) throws -> LibboxConnectionOwner? {
         #if os(macOS)
             if Variant.useSystemExtension {
                 guard let sourceAddress, let destinationAddress else {
@@ -255,22 +256,6 @@ public class ExtensionPlatformInterface: NSObject, LibboxPlatformInterfaceProtoc
     private var nwMonitor: NWPathMonitor?
 
     public func startDefaultInterfaceMonitor(_ listener: LibboxInterfaceUpdateListenerProtocol?) throws {
-        return
-        guard let listener else {
-            return
-        }
-        let monitor = NWPathMonitor()
-        nwMonitor = monitor
-        let semaphore = DispatchSemaphore(value: 0)
-        monitor.pathUpdateHandler = { path in
-            self.onUpdateDefaultInterface(listener, path)
-            semaphore.signal()
-            monitor.pathUpdateHandler = { path in
-                self.onUpdateDefaultInterface(listener, path)
-            }
-        }
-        monitor.start(queue: DispatchQueue.global())
-        semaphore.wait()
     }
 
     private func onUpdateDefaultInterface(_ listener: LibboxInterfaceUpdateListenerProtocol, _ path: Network.NWPath) {
@@ -289,7 +274,7 @@ public class ExtensionPlatformInterface: NSObject, LibboxPlatformInterfaceProtoc
         nwMonitor = nil
     }
 
-    public func getInterfaces() throws -> LibboxNetworkInterfaceIteratorProtocol {
+    public func getInterfaces() throws -> LibboxNetworkInterfaceIteratorProtocol? {
         throw NSError(domain: "not implemented", code: 0)
         guard let nwMonitor else {
             throw NSError(domain: "ExtensionPlatformInterface", code: 0, userInfo: [NSLocalizedDescriptionKey: String(localized: "NWMonitor not started")])
@@ -469,7 +454,7 @@ public class ExtensionPlatformInterface: NSObject, LibboxPlatformInterfaceProtoc
         nwMonitor = nil
     }
 
-    public func send(_ notification: LibboxNotification?) throws {
+    public func sendNotification(_ notification: LibboxNotification?) throws {
         #if !os(tvOS)
             guard let notification else {
                 return
@@ -506,6 +491,61 @@ public class ExtensionPlatformInterface: NSObject, LibboxPlatformInterfaceProtoc
     public func systemCertificates() -> (any LibboxStringIteratorProtocol)? {
         nil
     }
-    public func autoDetectControl(_: Int32) throws {}
+    public func autoDetectInterfaceControl(_: Int32) throws {
+    }
+
+    public func cancelNotification(_ identifier: String?, typeID: Int32) throws {
+    }
+
+    public func checkPlatformShell() throws {
+    }
+
+    public func closeNeighborMonitor(_ listener: LibboxNeighborUpdateListenerProtocol?) throws {
+    }
+
+    public func createAutoRedirect(_ options: Data?, handler: LibboxAutoRedirectHandlerProtocol?) throws -> LibboxAutoRedirectSessionProtocol? {
+        nil
+    }
+
+    public func createBridge(_ options: LibboxBridgeOptions?) throws -> LibboxBridgeSessionProtocol? {
+        nil
+    }
+
+    public func lookupSFTPServer(_ error: NSErrorPointer) -> String {
+        ""
+    }
+
+    public func lookupUser(_ username: String?) throws -> LibboxPlatformUser? {
+        nil
+    }
+
+    public func openShellSession(_ user: LibboxPlatformUser?, command: String?, environ: LibboxStringIteratorProtocol?, term: String?, rows: Int32, cols: Int32) throws -> LibboxShellSessionProtocol? {
+        nil
+    }
+
+    public func readSystemSSHHostKey(_ error: NSErrorPointer) -> String {
+        ""
+    }
+
+    public func registerMyInterface(_ name: String?) {}
+
+    public func startNeighborMonitor(_ listener: LibboxNeighborUpdateListenerProtocol?) throws {
+    }
+
+    public func tailscaleHostname() -> String {
+        ""
+    }
+
+    public func usePlatformAutoRedirect() -> Bool {
+        false
+    }
+
+    public func usePlatformBridge() -> Bool {
+        false
+    }
+
+    public func usePlatformShell() -> Bool {
+        false
+    }
 
 }
