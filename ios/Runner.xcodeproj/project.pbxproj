@@ -765,6 +765,8 @@
 					"-lresolv",
 					"-framework",
 					"UIKit",
+					"-framework",
+					"CoreTelephony",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(BASE_BUNDLE_IDENTIFIER).DonutPacketTunnel";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -821,6 +823,8 @@
 					"-lresolv",
 					"-framework",
 					"UIKit",
+					"-framework",
+					"CoreTelephony",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(BASE_BUNDLE_IDENTIFIER).DonutPacketTunnel";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -875,6 +879,8 @@
 					"-lresolv",
 					"-framework",
 					"UIKit",
+					"-framework",
+					"CoreTelephony",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(BASE_BUNDLE_IDENTIFIER).DonutPacketTunnel";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -983,6 +989,8 @@
 					"-lresolv",
 					"-framework",
 					"UIKit",
+					"-framework",
+					"CoreTelephony",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(BASE_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1208,6 +1216,8 @@
 					"-lresolv",
 					"-framework",
 					"UIKit",
+					"-framework",
+					"CoreTelephony",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(BASE_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1258,6 +1268,8 @@
 					"-lresolv",
 					"-framework",
 					"UIKit",
+					"-framework",
+					"CoreTelephony",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(BASE_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
