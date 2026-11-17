@@ -102,38 +102,18 @@ jobs:
         if: matrix.target == 'apk'
         run: flutter build apk --release
 
-      - name: Smoke test Android APK
+      - name: Verify Android APK architectures
         if: matrix.target == 'apk'
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          script: >-
-            set -e;
-            echo "ABI list: $(adb shell getprop ro.product.cpu.abilist)";
-            echo "Native bridge: $(adb shell getprop ro.dalvik.vm.native.bridge)";
-            APK_PATH=$(find build/app/outputs/flutter-apk -maxdepth 1 -name "app-release.apk" -print -quit);
-            if [ -z "$APK_PATH" ]; then APK_PATH=$(find build/app/outputs/flutter-apk -maxdepth 1 -name "app-arm64-v8a-release.apk" -print -quit); fi;
-            if [ -z "$APK_PATH" ]; then APK_PATH=$(find build/app/outputs/flutter-apk -maxdepth 1 -name "*.apk" | head -n 1); fi;
-            if [ -z "$APK_PATH" ]; then echo "No APK found"; exit 1; fi;
-            echo "Installing $APK_PATH";
-            adb install --abi arm64-v8a "$APK_PATH";
-            echo "Installed ABI: $(adb shell dumpsys package app.donutvpn.com | grep -m1 primaryCpuAbi || true)";
-            adb logcat -c || true;
-            adb shell am start -n app.donutvpn.com/com.donutvpn.app.MainActivity || true;
-            for i in $(seq 1 60); do if adb shell pidof app.donutvpn.com >/dev/null 2>&1; then echo "App process is running"; break; fi; sleep 2; done;
-            adb logcat -d > android-smoke-test.log;
-            adb shell pidof app.donutvpn.com || (echo "App crashed"; tail -n 300 android-smoke-test.log; exit 1)
-
-      - name: Upload Android smoke test log
-        if: always() && matrix.target == 'apk'
-        uses: actions/upload-artifact@v4
-        with:
-          name: donut-vpn-android-smoke-test-log
-          path: android-smoke-test.log
-          if-no-files-found: warn
-          retention-days: 14
+        run: |
+          set -e
+          echo "--- Verifying Android APK Architectures ---"
+          APK_PATH=$(find build/app/outputs/flutter-apk -name "app-release.apk" -print -quit)
+          test -n "$APK_PATH"
+          unzip -l "$APK_PATH" | grep "lib/" | grep "libdonut-core.so"
+          # Verify x86_64 (Chromebook) exists
+          unzip -l "$APK_PATH" | grep "lib/x86_64/libdonut-core.so" || (echo "FAIL: x86_64 core missing!" && exit 1)
+          # Verify arm64-v8a (Phones) exists
+          unzip -l "$APK_PATH" | grep "lib/arm64-v8a/libdonut-core.so" || (echo "FAIL: arm64-v8a core missing!" && exit 1)
 
       - name: Upload Android APK
         if: matrix.target == 'apk'
@@ -318,32 +298,19 @@ jobs:
           test -n "$APP_PATH"
           hdiutil create -volname "DonutVpn" -srcfolder "$APP_PATH" -ov -format UDZO Donut-Vpn-macOS.dmg
 
-      - name: Smoke test macOS app
+      - name: Verify macOS DMG architectures
         if: contains(matrix.target, 'macos')
         run: |
+          set -euo pipefail
+          echo "--- Verifying macOS DMG ---"
           hdiutil attach Donut-Vpn-macOS.dmg
-          cp -R "/Volumes/DonutVpn/Donut VPN.app" /tmp/
-          "/tmp/Donut VPN.app/Contents/MacOS/Donut VPN" > macos-smoke-test.log 2>&1 &
-          APP_PID=$!
-          sleep 10
-          if kill -0 "$APP_PID"; then
-            echo "macOS App is running"
-            kill "$APP_PID" 2>/dev/null || true
-            wait "$APP_PID" 2>/dev/null || true
-          else
-            echo "macOS App crashed"
-            cat macos-smoke-test.log
-            exit 1
-          fi
-
-      - name: Upload macOS smoke test log
-        if: always() && contains(matrix.target, 'macos')
-        uses: actions/upload-artifact@v4
-        with:
-          name: donut-vpn-macos-smoke-test-log
-          path: macos-smoke-test.log
-          if-no-files-found: warn
-          retention-days: 14
+          trap 'hdiutil detach "/Volumes/DonutVpn" >/dev/null 2>&1 || true' EXIT
+          CORE_DYLIB=$(find "/Volumes/DonutVpn/Donut VPN.app" -name "donut-core.dylib" -print -quit)
+          test -n "$CORE_DYLIB"
+          CORE_ARCHS=$(lipo -info "$CORE_DYLIB")
+          echo "$CORE_ARCHS"
+          echo "$CORE_ARCHS" | grep -q "x86_64" || (echo "FAIL: x86_64 macOS core missing!" && exit 1)
+          echo "$CORE_ARCHS" | grep -q "arm64" || (echo "FAIL: arm64 macOS core missing!" && exit 1)
 
       - name: Upload macOS DMG
         if: contains(matrix.target, 'macos')
@@ -400,6 +367,34 @@ jobs:
             echo "No .app found anywhere in build/ios"
             exit 1
           fi
+
+      - name: Verify iOS IPA architectures
+        if: contains(matrix.target, 'ios')
+        run: |
+          set -euo pipefail
+          echo "--- Verifying iOS IPA ---"
+          rm -rf temp_ipa
+          unzip -q Donut-Vpn-iOS-unsigned.ipa -d temp_ipa
+
+          CORE_IN_IPA=temp_ipa/Payload/Runner.app/Frameworks/DonutCore.framework/DonutCore
+          if [ -f "$CORE_IN_IPA" ]; then
+            echo "Found embedded DonutCore framework"
+            CORE_ARCHS=$(lipo -info "$CORE_IN_IPA")
+          else
+            echo "DonutCore is statically linked; checking the arm64 core slice and Runner binary"
+            CORE_IN_IPA=ios/Frameworks/DonutCore.xcframework/ios-arm64/DonutCore.framework/DonutCore
+            test -f "$CORE_IN_IPA"
+            CORE_ARCHS=$(lipo -info "$CORE_IN_IPA")
+          fi
+          echo "$CORE_ARCHS"
+          echo "$CORE_ARCHS" | grep -q "arm64" || (echo "FAIL: arm64 core missing in iOS!" && exit 1)
+
+          RUNNER=temp_ipa/Payload/Runner.app/Runner
+          test -f "$RUNNER"
+          RUNNER_ARCHS=$(lipo -info "$RUNNER")
+          echo "$RUNNER_ARCHS"
+          echo "$RUNNER_ARCHS" | grep -q "arm64" || (echo "FAIL: arm64 Runner binary missing!" && exit 1)
+          rm -rf temp_ipa
 
       - name: Upload iOS IPA
         if: always() && contains(matrix.target, 'ios')

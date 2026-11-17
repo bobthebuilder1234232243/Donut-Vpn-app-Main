@@ -479,8 +479,15 @@ ios-release: #not tested
 	fastforge package --platform ios --targets ipa --build-export-options-plist  ios/exportOptions.plist $(DISTRIBUTOR_ARGS)
 
 android-libs:
-	$(MKDIR) $(ANDROID_OUT) || echo Folder already exists. Skipping...
-	curl -L $(CORE_URL)/$(CORE_NAME)-android-arm64.tar.gz | tar xz -C $(ANDROID_OUT)/
+	$(MKDIR) $(ANDROID_OUT)
+	rm -rf .android-core-tmp
+	mkdir -p .android-core-tmp/arm64 .android-core-tmp/amd64 .android-core-tmp/x86_64/jni/x86_64
+	curl -fL $(CORE_URL)/$(CORE_NAME)-android-arm64.tar.gz | tar xz -C .android-core-tmp/arm64
+	curl -fL $(CORE_URL)/$(CORE_NAME)-android-amd64.tar.gz | tar xz -C .android-core-tmp/amd64
+	cp .android-core-tmp/arm64/donut-core.aar $(ANDROID_OUT)/donut-core.aar
+	unzip -j -o .android-core-tmp/amd64/donut-core.aar "jni/x86_64/libdonut-core.so" -d .android-core-tmp/x86_64/jni/x86_64
+	python3 -c 'import zipfile; z=zipfile.ZipFile("$(ANDROID_OUT)/donut-core.aar", "a"); z.write(".android-core-tmp/x86_64/jni/x86_64/libdonut-core.so", "jni/x86_64/libdonut-core.so"); z.close()'
+	rm -rf .android-core-tmp
 
 android-apk-libs: android-libs
 android-aab-libs: android-libs
@@ -509,8 +516,14 @@ linux-arm64-musl-libs:
 
 
 macos-libs:
-	mkdir -p  $(DESKTOP_OUT) 
-	curl -L $(CORE_URL)/$(CORE_NAME)-darwin-arm64.tar.gz | tar xz -C $(DESKTOP_OUT)
+	$(MKDIR) $(DESKTOP_OUT)
+	rm -rf .macos-core-tmp
+	mkdir -p .macos-core-tmp/arm64 .macos-core-tmp/amd64
+	curl -fL $(CORE_URL)/$(CORE_NAME)-darwin-arm64.tar.gz | tar xz -C .macos-core-tmp/arm64
+	curl -fL $(CORE_URL)/$(CORE_NAME)-darwin-amd64.tar.gz | tar xz -C .macos-core-tmp/amd64
+	lipo -create .macos-core-tmp/arm64/donut-core.dylib .macos-core-tmp/amd64/donut-core.dylib -output $(DESKTOP_OUT)/donut-core.dylib
+	@if [ -f .macos-core-tmp/arm64/desktop.h ]; then cp .macos-core-tmp/arm64/desktop.h $(DESKTOP_OUT)/desktop.h; fi
+	rm -rf .macos-core-tmp
 
 ios-libs: #not tested
 	mkdir -p $(IOS_OUT)
