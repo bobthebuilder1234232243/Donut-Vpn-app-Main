@@ -486,7 +486,7 @@ android-libs:
 	curl -fL $(CORE_URL)/$(CORE_NAME)-android-amd64.tar.gz | tar xz -C .android-core-tmp/amd64
 	cp .android-core-tmp/arm64/donut-core.aar $(ANDROID_OUT)/donut-core.aar
 	unzip -j -o .android-core-tmp/amd64/donut-core.aar "jni/x86_64/libdonut-core.so" -d .android-core-tmp/x86_64/jni/x86_64
-	python3 -c 'import zipfile; z=zipfile.ZipFile("$(ANDROID_OUT)/donut-core.aar", "a"); z.write(".android-core-tmp/x86_64/jni/x86_64/libdonut-core.so", "jni/x86_64/libdonut-core.so"); z.close()'
+	python3 -c 'import zipfile; src=".android-core-tmp/x86_64/jni/x86_64/libdonut-core.so"; dst="$(ANDROID_OUT)/donut-core.aar"; info=zipfile.ZipInfo("jni/x86_64/libdonut-core.so", date_time=(1980, 1, 1, 0, 0, 0)); info.compress_type=zipfile.ZIP_DEFLATED; info.external_attr=0o100644 << 16; z=zipfile.ZipFile(dst, "a"); z.writestr(info, open(src, "rb").read()); z.close()'
 	rm -rf .android-core-tmp
 
 android-apk-libs: android-libs
