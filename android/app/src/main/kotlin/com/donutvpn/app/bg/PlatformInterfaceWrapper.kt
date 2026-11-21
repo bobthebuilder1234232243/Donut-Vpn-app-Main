@@ -80,7 +80,9 @@ interface PlatformInterfaceWrapper : PlatformInterface {
         } catch (e: Exception) {
             Log.e("PlatformInterface", "getConnectionOwnerUid", e)
             e.printStackTrace(System.err)
-            throw e
+            // Never throw across the gomobile JNI boundary: an exception here
+            // aborts the native process. Return an invalid owner instead.
+            return ConnectionOwner().apply { userId = Process.INVALID_UID }
         }
     }
 

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:grpc/grpc.dart';
 import 'package:donutclub/core/directories/directories_provider.dart';
@@ -44,14 +45,17 @@ class DonutCoreService with InfraLogger {
   List<OutboundGroup> latest = [];
 
   Future<void> init() async {
+    debugPrint('DonutCoreService: Attempting to initialize native engine...');
     await setup()
         .mapLeft((e) {
+          debugPrint('DonutCoreService: Native engine initialization failed: $e');
           loggy.error(e);
           if (PlatformUtils.isIOS) return;
           statusController.add(const CoreStatus.stopped());
           ref.read(inAppNotificationControllerProvider).showErrorToast(e);
         })
         .map((_) {
+          debugPrint('DonutCoreService: Native engine initialization result: success');
           loggy.info("donut-core setup done");
           ref.read(coreRestartSignalProvider.notifier).restart();
         })
@@ -91,9 +95,11 @@ class DonutCoreService with InfraLogger {
       try {
         final directories = ref.read(appDirectoriesProvider).requireValue;
         final debug = ref.read(debugModeNotifierProvider);
+        debugPrint('DonutCoreService: Initializing native core...');
         final setupResponse = await core.setup(directories, debug, 3);
 
         if (setupResponse.isNotEmpty) {
+          debugPrint('DonutCoreService: Native core initialization result: failure ($setupResponse)');
           return left(setupResponse);
         }
 
@@ -105,8 +111,10 @@ class DonutCoreService with InfraLogger {
         statusController.add(currentState);
         await startListeningStatus("bg", core.bgClient);
         // ref.read(coreRestartSignalProvider.notifier).restart();
+        debugPrint('DonutCoreService: Native core initialization result: success');
         return right(unit);
-      } catch (e) {
+      } catch (e, stackTrace) {
+        debugPrint('DonutCoreService: Native core initialization result: failure ($e)\n$stackTrace');
         return left(e.toString());
       }
     });
@@ -140,8 +148,19 @@ class DonutCoreService with InfraLogger {
     return TaskEither(() async {
       statusController.add(currentState = const CoreStatus.starting());
       loggy.debug("starting");
-      final background = await core.setupBackground(path, name);
+      debugPrint('DonutCoreService: Attempting to start native engine with config... path=$path name=$name');
+      CoreStatus background = const CoreStatus.stopped();
+      try {
+        background = await core.setupBackground(path, name);
+      } catch (e, stackTrace) {
+        debugPrint(
+          'DonutCoreService: Native engine start result: failure (setupBackground exception: $e)\n$stackTrace',
+        );
+        statusController.add(currentState = const CoreStatus.stopped());
+        return left(ConnectionFailure.unexpected('failed to start native engine: $e'));
+      }
       if (background != const CoreStatus.started()) {
+        debugPrint('DonutCoreService: Native engine start result: failure (setupBackground: $background)');
         statusController.add(currentState = const CoreStatus.stopped());
         return left(background.getCoreAlert() ?? const ConnectionFailure.unexpected("failed to start core"));
       }
@@ -169,6 +188,9 @@ class DonutCoreService with InfraLogger {
         );
         ref.read(coreRestartSignalProvider.notifier).restart();
         if (res.messageType != MessageType.ALREADY_STARTED && res.messageType != MessageType.EMPTY) {
+          debugPrint(
+            'DonutCoreService: Native engine start result: failure (${res.messageType}: ${res.message})',
+          );
           final alert = res.message.contains("denied") ? CoreAlert.requestVPNPermission : CoreAlert.startFailed;
           currentState = CoreStatus.stopped(
             alert: alert,
@@ -181,8 +203,13 @@ class DonutCoreService with InfraLogger {
             currentState.getCoreAlert() ??
                 ConnectionFailure.unexpected("failed to start core ${res.messageType} ${res.message}"),
           );
+        } else {
+          debugPrint('DonutCoreService: Native engine start result: success');
         }
       } on GrpcError catch (e) {
+        debugPrint(
+          'DonutCoreService: Native engine start result: failure (gRPC code=${e.code}: ${e.message})',
+        );
         loggy.error("failed to start bg core: $e");
         ref.read(coreRestartSignalProvider.notifier).restart();
         if (e.code == StatusCode.unavailable) {
@@ -193,6 +220,9 @@ class DonutCoreService with InfraLogger {
 
         // throw DioException(requestOptions: RequestOptions(), error: e);
         return left(const ConnectionFailure.unexpected("failed to start background core"));
+      } catch (e, stackTrace) {
+        debugPrint('DonutCoreService: Native engine start result: failure ($e)\n$stackTrace');
+        rethrow;
       }
 
       // if (res.messageType != MessageType.EMPTY) return left(res);

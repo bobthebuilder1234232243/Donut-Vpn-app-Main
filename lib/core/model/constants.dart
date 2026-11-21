@@ -8,6 +8,8 @@ abstract class Constants {
   static const githubUrl = "https://techperson1234.github.io/Donut-VPN/";
   static const licenseUrl = "https://techperson1234.github.io/Donut-VPN/";
   static const githubReleasesApiUrl = "https://techperson1234.github.io/Donut-VPN/";
+  static const vpnEngineFailureMessage =
+      'Vpn Engine failed: pls try again later or report on the website: https://techperson1234.github.io/Donut-VPN/';
   static const githubLatestReleaseUrl = "https://techperson1234.github.io/Donut-VPN/";
   static const appCastUrl = "https://techperson1234.github.io/Donut-VPN/";
   static const telegramChannelUrl = "https://techperson1234.github.io/Donut-VPN/";

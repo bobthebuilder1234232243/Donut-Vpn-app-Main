@@ -1,7 +1,10 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:donutclub/core/haptic/haptic_service.dart';
 import 'package:donutclub/core/localization/translations.dart';
+import 'package:donutclub/core/model/constants.dart';
+import 'package:donutclub/core/notification/in_app_notification_controller.dart';
 import 'package:donutclub/core/preferences/general_preferences.dart';
 import 'package:donutclub/core/router/dialog/dialog_notifier.dart';
 import 'package:donutclub/features/connection/data/connection_data_providers.dart';
@@ -67,29 +70,41 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
 
   Future<void> mayConnect() async {
     if (state case AsyncData(:final value)) {
-      if (value case Disconnected()) return _connect();
+      if (value case Disconnected()) {
+        try {
+          await _connect();
+        } catch (e) {
+          loggy.warning("Ignored connection error in mayConnect: $e");
+        }
+      }
     }
   }
 
   Future<void> toggleConnection() async {
-    final haptic = ref.read(hapticServiceProvider.notifier);
-    if (state case AsyncError()) {
-      await haptic.lightImpact();
-      await _connect();
-    } else if (state case AsyncData(:final value)) {
-      switch (value) {
-        case Disconnected():
-          await haptic.lightImpact();
-          await ref.read(Preferences.startedByUser.notifier).update(true);
-          await _connect();
-        case Connected():
-          // default:
-          await haptic.mediumImpact();
-          await ref.read(Preferences.startedByUser.notifier).update(false);
-          await _disconnect();
-        default:
-          loggy.warning("switching status, debounce");
+    try {
+      final haptic = ref.read(hapticServiceProvider.notifier);
+      if (state case AsyncError()) {
+        await haptic.lightImpact();
+        await _connect();
+      } else if (state case AsyncData(:final value)) {
+        switch (value) {
+          case Disconnected():
+            await haptic.lightImpact();
+            await ref.read(Preferences.startedByUser.notifier).update(true);
+            await _connect();
+          case Connected():
+            // default:
+            await haptic.mediumImpact();
+            await ref.read(Preferences.startedByUser.notifier).update(false);
+            await _disconnect();
+          default:
+            loggy.warning("switching status, debounce");
+        }
       }
+    } catch (e, stackTrace) {
+      debugPrint('Connection failed: $e\n$stackTrace');
+      if (!state.hasError) state = AsyncError(e, stackTrace);
+      ref.read(inAppNotificationControllerProvider).showErrorToast(Constants.vpnEngineFailureMessage);
     }
   }
 
@@ -97,7 +112,12 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     if (state case AsyncData(:final value) when value == const Connected()) {
       if (profile == null) {
         loggy.info("no active profile, disconnecting");
-        return _disconnect();
+        try {
+          await _disconnect();
+        } catch (e) {
+          loggy.warning("Ignored connection error in reconnect: $e");
+        }
+        return;
       }
       loggy.info("active profile changed, reconnecting");
       await ref.read(Preferences.startedByUser.notifier).update(true);
@@ -116,7 +136,11 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       switch (value) {
         case Connected() || Connecting():
           loggy.debug("aborting connection");
-          await _disconnect();
+          try {
+            await _disconnect();
+          } catch (e) {
+            loggy.warning("Ignored connection error in abortConnection: $e");
+          }
         default:
       }
     }
@@ -125,7 +149,7 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
   final _singleStart = SingleCall();
 
   Future<void> _connect() async {
-    _singleStart.run(
+    await _singleStart.run(
       () async {
         await _connectThrottled();
       },
@@ -141,31 +165,31 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       loggy.info("no active profile, not connecting");
       return;
     }
-    await _connectionRepo.connect(activeProfile, ref.read(Preferences.disableMemoryLimit)).mapLeft((
-      ConnectionFailure err,
-    ) async {
-      loggy.warning("error connecting", err);
-      //Go err is not normal object to see the go errors are string and need to be dumped
-      await ref
-          .read(dialogNotifierProvider.notifier)
-          .showCustomAlertFromErr(err.present(ref.read(translationsProvider).requireValue));
-      loggy.warning(err);
-      if (err.toString().contains("panic")) {
-        await Sentry.captureException(Exception(err.toString()));
-      }
-      await ref.read(Preferences.startedByUser.notifier).update(false);
-      state = AsyncError(err, StackTrace.current);
-    }).run();
+    final result = await _connectionRepo
+        .connect(activeProfile, ref.read(Preferences.disableMemoryLimit))
+        .run();
+    final failure = result.fold<ConnectionFailure?>((err) => err, (_) => null);
+    if (failure == null) return;
+
+    loggy.warning("error connecting", failure);
+    if (failure.toString().contains("panic")) {
+      await Sentry.captureException(Exception(failure.toString()));
+    }
+    await ref.read(Preferences.startedByUser.notifier).update(false);
+    state = AsyncError(failure, StackTrace.current);
+    // Surfaced once by toggleConnection()'s catch block.
+    throw failure;
   }
 
   Future<void> _disconnect() async {
-    await _connectionRepo.disconnect().mapLeft((err) {
-      loggy.warning("error disconnecting", err);
-      ref
-          .read(dialogNotifierProvider.notifier)
-          .showCustomAlertFromErr(err.present(ref.read(translationsProvider).requireValue));
-      state = AsyncError(err, StackTrace.current);
-    }).run();
+    final result = await _connectionRepo.disconnect().run();
+    final failure = result.fold<ConnectionFailure?>((err) => err, (_) => null);
+    if (failure == null) return;
+
+    loggy.warning("error disconnecting", failure);
+    state = AsyncError(failure, StackTrace.current);
+    // Surfaced once by toggleConnection()'s catch block.
+    throw failure;
   }
 }
 
