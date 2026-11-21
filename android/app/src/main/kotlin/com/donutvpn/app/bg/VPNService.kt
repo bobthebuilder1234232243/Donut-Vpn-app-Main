@@ -52,7 +52,11 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
     }
 
     override fun autoDetectInterfaceControl(fd: Int) {
-        protect(fd)
+        try {
+            protect(fd)
+        } catch (t: Throwable) {
+            Log.e(TAG, "protect($fd) failed", t)
+        }
     }
 
     var systemProxyAvailable = false
@@ -77,7 +81,15 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
         }
     }
 
-    override fun openTun(options: TunOptions): Int {
+    override fun openTun(options: TunOptions): Int =
+        try {
+            createTun(options)
+        } catch (t: Throwable) {
+            Log.e(TAG, "openTun failed, returning -1", t)
+            -1
+        }
+
+    private fun createTun(options: TunOptions): Int {
         var hasPermission = false
         for (i in 0 until 20) {
             if (prepare(this) != null) {

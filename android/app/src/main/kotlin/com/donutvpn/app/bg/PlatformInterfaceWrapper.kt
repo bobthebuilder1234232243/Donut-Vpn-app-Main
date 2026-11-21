@@ -4,9 +4,7 @@ import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.net.NetworkCapabilities
 import android.os.Build
-import android.os.Process
 import android.util.Log
-import androidx.annotation.RequiresApi
 import com.donutvpn.app.Application
 import com.donutvpn.core.libbox.InterfaceUpdateListener
 import com.donutvpn.core.libbox.Libbox
@@ -16,7 +14,6 @@ import com.donutvpn.core.libbox.StringIterator
 import com.donutvpn.core.libbox.TunOptions
 import com.donutvpn.core.libbox.WIFIState
 import java.net.Inet6Address
-import java.net.InetSocketAddress
 import java.net.InterfaceAddress
 import java.net.NetworkInterface
 import java.util.Enumeration
@@ -45,56 +42,65 @@ interface PlatformInterfaceWrapper : PlatformInterface {
     }
 
     override fun openTun(options: TunOptions): Int {
-        error("invalid argument")
+        // Never throw across the gomobile JNI boundary.
+        Log.e("PlatformInterface", "openTun is not supported on this interface")
+        return -1
     }
 
     fun useProcFS(): Boolean =  Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
 
-    @RequiresApi(Build.VERSION_CODES.Q)
     override fun findConnectionOwner(
         ipProtocol: Int,
         sourceAddress: String,
         sourcePort: Int,
         destinationAddress: String,
-        destinationPort: Int,
+        destinationPort: Int
     ): ConnectionOwner {
+        // Always return a valid object. Never return null.
+        val owner = ConnectionOwner()
         try {
-            val uid =
-                Application.connectivity.getConnectionOwnerUid(
-                    ipProtocol,
-                    InetSocketAddress(sourceAddress, sourcePort),
-                    InetSocketAddress(destinationAddress, destinationPort),
-                )
-//            if (uid == Process.INVALID_UID)error("android: connection owner not found")
+            Log.d("PlatformInterface", "findConnectionOwner called for $destinationAddress:$destinationPort")
 
-            val owner = ConnectionOwner()
-            owner.userId = uid
-            if (uid!=Process.INVALID_UID) {
-                val packages = Application.packageManager.getPackagesForUid(uid)
-                owner.userName = packages?.firstOrNull() ?: ""
-                owner.setAndroidPackageNames(
-                    StringArray(packages?.iterator() ?: emptyList<String>().iterator()),
-                )
-            }
-            return owner
-        } catch (e: Exception) {
-            Log.e("PlatformInterface", "getConnectionOwnerUid", e)
-            e.printStackTrace(System.err)
-            // Never throw across the gomobile JNI boundary: an exception here
-            // aborts the native process. Return an invalid owner instead.
-            return ConnectionOwner().apply { userId = Process.INVALID_UID }
+            // TODO: If you have safe, non-throwing logic to get the UID, put it here.
+            // For now, we default to INVALID_UID (-1) to guarantee no JNI crashes.
+            // Do NOT call external functions here unless you are 100% sure they cannot throw or return null.
+
+            owner.userId = -1 // Process.INVALID_UID
+
+            Log.d("PlatformInterface", "findConnectionOwner returning safely with userId: ${owner.userId}")
+        } catch (t: Throwable) {
+            // Catch Throwable, not just Exception, to catch Errors and RuntimeExceptions
+            Log.e("PlatformInterface", "findConnectionOwner caught Throwable, returning INVALID_UID", t)
+            owner.userId = -1
         }
+        return owner
     }
 
     override fun startDefaultInterfaceMonitor(listener: InterfaceUpdateListener) {
-        DefaultNetworkMonitor.setListener(listener)
+        try {
+            DefaultNetworkMonitor.setListener(listener)
+        } catch (t: Throwable) {
+            Log.e("PlatformInterface", "startDefaultInterfaceMonitor failed", t)
+        }
     }
 
     override fun closeDefaultInterfaceMonitor(listener: InterfaceUpdateListener) {
-        DefaultNetworkMonitor.setListener(null)
+        try {
+            DefaultNetworkMonitor.setListener(null)
+        } catch (t: Throwable) {
+            Log.e("PlatformInterface", "closeDefaultInterfaceMonitor failed", t)
+        }
     }
 
-    override fun getInterfaces(): NetworkInterfaceIterator {
+    override fun getInterfaces(): NetworkInterfaceIterator =
+        try {
+            buildInterfaces()
+        } catch (t: Throwable) {
+            Log.e("PlatformInterface", "getInterfaces failed", t)
+            InterfaceArray(emptyList<LibboxNetworkInterface>().iterator())
+        }
+
+    private fun buildInterfaces(): NetworkInterfaceIterator {
         val networks = Application.connectivity.allNetworks
         val networkInterfaces = NetworkInterface.getNetworkInterfaces().toList()
         val interfaces = mutableListOf<LibboxNetworkInterface>()
@@ -200,7 +206,15 @@ interface PlatformInterfaceWrapper : PlatformInterface {
 
     override fun usePlatformShell(): Boolean = false
 
-    override fun readWIFIState(): WIFIState? {
+    override fun readWIFIState(): WIFIState? =
+        try {
+            readWIFIStateInternal()
+        } catch (t: Throwable) {
+            Log.e("PlatformInterface", "readWIFIState failed", t)
+            null
+        }
+
+    private fun readWIFIStateInternal(): WIFIState? {
         @Suppress("DEPRECATION")
         val wifiInfo =
             Application.wifiManager.connectionInfo ?: return null
@@ -216,8 +230,16 @@ interface PlatformInterfaceWrapper : PlatformInterface {
 
     override fun localDNSTransport(): LocalDNSTransport? = LocalResolver
 
+    override fun systemCertificates(): StringIterator =
+        try {
+            readSystemCertificates()
+        } catch (t: Throwable) {
+            Log.e("PlatformInterface", "systemCertificates failed", t)
+            StringArray(emptyList<String>().iterator())
+        }
+
     @OptIn(ExperimentalEncodingApi::class)
-    override fun systemCertificates(): StringIterator {
+    private fun readSystemCertificates(): StringIterator {
         val certificates = mutableListOf<String>()
         val keyStore = KeyStore.getInstance("AndroidCAStore")
         if (keyStore != null) {
