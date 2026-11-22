@@ -494,11 +494,15 @@ class DonutCoreService with InfraLogger {
       // .endWith(const CoreStatus.stopped())
       onError: (error) {
         loggy.error("Stream error in ${key}StatusListener: $error");
-
-        // currentState = const CoreStatus.stopped();
-        // statusController.add(currentState);
-
-        // startListeningStatus(key, cc);
+        // A dead status stream must not leave the UI stuck in Connecting.
+        if (currentState is! CoreStopped) {
+          statusController.add(
+            currentState = CoreStatus.stopped(
+              alert: CoreAlert.startFailed,
+              message: "status listener error: $error",
+            ),
+          );
+        }
       },
     );
   }

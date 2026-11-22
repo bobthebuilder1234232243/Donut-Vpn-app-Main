@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -59,14 +60,39 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     ref.watch(coreRestartSignalProvider);
 
     yield* _connectionRepo.watchConnectionStatus().doOnData((event) {
-      if (event case Disconnected(connectionFailure: final _?) when PlatformUtils.isDesktop) {
+      if (event is Connected) {
+        _failureSurfaced = false;
+        _connectTimeoutTimer?.cancel();
+      }
+      if (event is Disconnected) {
+        _connectTimeoutTimer?.cancel();
+      }
+      if (event case Disconnected(connectionFailure: final failure?)) {
+        loggy.warning("connection failed: $failure");
         Future.microtask(() => ref.read(Preferences.startedByUser.notifier).update(false));
+        // Only the status of an in-flight connect attempt is surfaced here; a
+        // synchronous start failure is surfaced once by toggleConnection().
+        if (state.valueOrNull is Connecting) _surfaceFailureOnce();
       }
       loggy.info("connection status: ${event.format()}");
     });
   }
 
   ConnectionRepository get _connectionRepo => ref.read(connectionRepositoryProvider);
+
+  // Caps the whole connect() call, including a slow VPN-permission dialog or hung gRPC start.
+  static const _connectHardTimeout = Duration(seconds: 90);
+  // Caps the wait for the status stream to confirm Connected after connect() accepted.
+  static const _connectSoftTimeout = Duration(seconds: 30);
+  Timer? _connectTimeoutTimer;
+  bool _failureSurfaced = false;
+
+  /// Single owner of the engine-failure toast: shows it at most once per attempt.
+  void _surfaceFailureOnce() {
+    if (_failureSurfaced) return;
+    _failureSurfaced = true;
+    ref.read(inAppNotificationControllerProvider).showErrorToast(Constants.vpnEngineFailureMessage);
+  }
 
   Future<void> mayConnect() async {
     if (state case AsyncData(:final value)) {
@@ -97,6 +123,11 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
             await haptic.mediumImpact();
             await ref.read(Preferences.startedByUser.notifier).update(false);
             await _disconnect();
+          case Connecting():
+            // Let the user cancel a connect that is stuck (e.g. NO_AVAILABLE_PROXIES).
+            await haptic.mediumImpact();
+            await ref.read(Preferences.startedByUser.notifier).update(false);
+            await _disconnect();
           default:
             loggy.warning("switching status, debounce");
         }
@@ -104,7 +135,7 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     } catch (e, stackTrace) {
       debugPrint('Connection failed: $e\n$stackTrace');
       if (!state.hasError) state = AsyncError(e, stackTrace);
-      ref.read(inAppNotificationControllerProvider).showErrorToast(Constants.vpnEngineFailureMessage);
+      _surfaceFailureOnce();
     }
   }
 
@@ -151,6 +182,8 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
   Future<void> _connect() async {
     await _singleStart.run(
       () async {
+        _failureSurfaced = false;
+        _connectTimeoutTimer?.cancel();
         await _connectThrottled();
       },
       onIgnored: () {
@@ -165,12 +198,27 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       loggy.info("no active profile, not connecting");
       return;
     }
-    final result = await _connectionRepo
-        .connect(activeProfile, ref.read(Preferences.disableMemoryLimit))
-        .run();
-    final failure = result.fold<ConnectionFailure?>((err) => err, (_) => null);
-    if (failure == null) return;
+    _failureSurfaced = false;
+    ConnectionFailure? failure;
+    try {
+      final result = await _connectionRepo
+          .connect(activeProfile, ref.read(Preferences.disableMemoryLimit))
+          .run()
+          .timeout(_connectHardTimeout);
+      failure = result.fold<ConnectionFailure?>((err) => err, (_) => null);
+    } on TimeoutException {
+      loggy.warning("connect() hard timeout after ${_connectHardTimeout.inSeconds}s, aborting");
+      await _abortStuckConnect();
+      return;
+    }
+    if (failure == null) {
+      // Core accepted the config; now guard only the wait for Connected.
+      _connectTimeoutTimer?.cancel();
+      _connectTimeoutTimer = Timer(_connectSoftTimeout, _onConnectTimeout);
+      return;
+    }
 
+    _connectTimeoutTimer?.cancel();
     loggy.warning("error connecting", failure);
     if (failure.toString().contains("panic")) {
       await Sentry.captureException(Exception(failure.toString()));
@@ -182,6 +230,7 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
   }
 
   Future<void> _disconnect() async {
+    _connectTimeoutTimer?.cancel();
     final result = await _connectionRepo.disconnect().run();
     final failure = result.fold<ConnectionFailure?>((err) => err, (_) => null);
     if (failure == null) return;
@@ -190,6 +239,29 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     state = AsyncError(failure, StackTrace.current);
     // Surfaced once by toggleConnection()'s catch block.
     throw failure;
+  }
+
+  void _onConnectTimeout() {
+    loggy.warning("connect timed out after ${_connectSoftTimeout.inSeconds}s, aborting");
+    unawaited(_abortStuckConnect());
+  }
+
+  Future<void> _abortStuckConnect() async {
+    if (state.valueOrNull is Connected) {
+      _connectTimeoutTimer?.cancel();
+      return;
+    }
+    try {
+      // Bound the native stop so the timeout itself can never block the UI.
+      await _disconnect().timeout(const Duration(seconds: 5));
+    } catch (e) {
+      loggy.warning("Ignored connection error in connect timeout: $e");
+    }
+    await ref.read(Preferences.startedByUser.notifier).update(false);
+    if (state.valueOrNull is! Disconnected) {
+      state = const AsyncData(Disconnected());
+    }
+    _surfaceFailureOnce();
   }
 }
 

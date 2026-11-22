@@ -54,10 +54,17 @@ class ConnectionButton extends HookConsumerWidget {
           }
           return await ref.read(connectionNotifierProvider.notifier).toggleConnection();
         },
+        AsyncData(value: Connecting()) => () async {
+          // Allow aborting a connect that is stuck (e.g. core reports NO_AVAILABLE_PROXIES).
+          return await ref.read(connectionNotifierProvider.notifier).toggleConnection();
+        },
         _ => () {},
       },
       enabled: switch (connectionStatus) {
-        AsyncData(value: Connected()) || AsyncData(value: Disconnected()) || AsyncError() => true,
+        AsyncData(value: Connected()) ||
+        AsyncData(value: Disconnected()) ||
+        AsyncData(value: Connecting()) ||
+        AsyncError() => true,
         _ => false,
       },
       label: switch (connectionStatus) {
@@ -158,7 +165,14 @@ class _ConnectionButton extends StatelessWidget {
                     return SizedBox.expand(
                       child: useImage
                           ? image.image(fit: BoxFit.cover)
-                          : Image.asset('assets/images/donut_logo.png', fit: BoxFit.cover),
+                          : Center(
+                              child: Image.asset(
+                                'assets/images/donut_logo.png',
+                                width: 148,
+                                height: 148,
+                                fit: BoxFit.contain,
+                              ),
+                            ),
                     );
                   },
                 ),

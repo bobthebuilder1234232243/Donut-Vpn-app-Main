@@ -183,21 +183,21 @@ flutter_native_splash:
   android_12:
     color: "#293CA0"
     color_dark: "#10131C"
-    image: assets/images/source/ic_launcher_border.png
+    image: assets/images/donut_logo.png # UPDATED: Points to the newly centered logo
 
 flutter_launcher_icons:
   android: "ic_launcher"
   ios: true
-  image_path: "assets/images/source/ic_launcher_border.png"
+  image_path: "assets/images/donut_logo.png" # UPDATED: Points to the newly centered logo
   min_sdk_android: 21
   adaptive_icon_background: "#FFFFFF"
-  adaptive_icon_foreground: "assets/images/source/ic_launcher_border.png"
-  adaptive_icon_foreground_inset: 16
+  adaptive_icon_foreground: "assets/images/donut_logo.png" # UPDATED: Points to the newly centered logo
+  adaptive_icon_foreground_inset: 0
   remove_alpha_ios: true
   background_color_ios: "#FFFFFF"
   windows:
     generate: true
-    image_path: "assets/images/source/ic_launcher_border.png"
+    image_path: "assets/images/donut_logo.png" # UPDATED: Points to the newly centered logo
     icon_size: 256
 
 ffigen:

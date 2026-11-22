@@ -65,11 +65,22 @@ sealed class CoreStatus with _$CoreStatus {
       case CoreStates.WAITING:
         return const CoreStarting();
       case CoreStates.STARTED:
+      case CoreStates.HOT_RELOADING:
         return const CoreStarted();
       case CoreStates.STOPPING:
         return const CoreStopping();
+      case CoreStates.NO_AVAILABLE_PROXIES:
+        // Never throw across the status stream: that kills the subscription and
+        // leaves the UI stuck in Connecting forever. Report a failed start instead.
+        return CoreStatus.stopped(
+          alert: CoreAlert.startFailed,
+          message: event.message.isEmpty ? "NO_AVAILABLE_PROXIES" : event.message,
+        );
       default:
-        throw Exception("unexpected status [$event]");
+        return CoreStatus.stopped(
+          alert: CoreAlert.startFailed,
+          message: event.message.isEmpty ? "unexpected status [${event.coreState}]" : event.message,
+        );
     }
   }
 
