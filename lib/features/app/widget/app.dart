@@ -71,6 +71,9 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
     return WindowWrapper(
       ShortcutWrapper(
         ToastificationWrapper(
+          // Wide enough that long error messages (and their URLs) wrap fully
+          // even on narrow Chromebook windows instead of being clipped.
+          config: const ToastificationConfig(itemWidth: 420.0),
           child: ConnectionWrapper(
             DynamicColorBuilder(
               builder: (ColorScheme? lightColorScheme, ColorScheme? darkColorScheme) {

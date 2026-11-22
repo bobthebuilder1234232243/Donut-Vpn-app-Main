@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:donutclub/core/localization/translations.dart';
 import 'package:donutclub/features/chain/overview/chain_quick_settings.dart';
+import 'package:donutclub/features/connection/notifier/connection_notifier.dart';
 import 'package:donutclub/features/settings/data/config_option_repository.dart';
 import 'package:donutclub/features/settings/widget/lan_sharing_tile.dart';
 import 'package:donutclub/singbox/model/singbox_config_enum.dart';
@@ -41,6 +42,22 @@ class QuickSettingsModal extends HookConsumerWidget {
             const LanSharingPreferenceWidget(),
             const Divider(height: 2, thickness: 2),
             const ChainQuickSettings(),
+            const Divider(height: 2, thickness: 2),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    final notifier = ref.read(connectionNotifierProvider.notifier);
+                    Navigator.of(context).pop();
+                    await notifier.forceDisconnect();
+                  },
+                  icon: const Icon(Icons.stop_rounded, size: 20),
+                  label: Text(t.connection.disconnect),
+                ),
+              ),
+            ),
             // const Gap(12),
             // ListTile(
             //   leading: const Icon(Icons.cloud_rounded),

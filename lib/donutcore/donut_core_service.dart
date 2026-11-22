@@ -236,7 +236,10 @@ class DonutCoreService with InfraLogger {
       loggy.debug("stopping");
       var errMsg = "";
       try {
-        final res = await core.bgClient.stop(Empty());
+        // Never let a frozen Go core block the native close below.
+        await core.bgClient.stop(Empty()).timeout(const Duration(seconds: 3));
+      } on TimeoutException {
+        loggy.warning("gRPC stop timed out, proceeding to native close anyway");
       } on GrpcError catch (e) {
         if (e.code == StatusCode.unknown && !(e.message?.contains("HTTP/2") ?? false)) {
           errMsg = e.message ?? "failed to stop core: $e";

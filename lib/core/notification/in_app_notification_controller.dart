@@ -25,7 +25,15 @@ class InAppNotificationController with AppLogger {
     try {
       toastification.dismissAll();
       return toastification.show(
-        title: Text(message),
+        title: Text(
+          message,
+          // Override toastification's BuiltInContent DefaultTextStyle(maxLines: 1)
+          // so the full message (including the URL) wraps instead of being clipped.
+          maxLines: 6,
+          softWrap: true,
+          overflow: TextOverflow.visible,
+          textAlign: TextAlign.start,
+        ),
         type: type._toastificationType,
         alignment: AlignmentDirectional.bottomCenter,
         margin: const EdgeInsets.only(bottom: 64 + 16, right: 16, left: 16),

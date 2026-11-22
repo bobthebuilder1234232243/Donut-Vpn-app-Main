@@ -58,7 +58,15 @@ class CustomToast extends StatelessWidget {
   void show(BuildContext context) {
     toastification.show(
       context: context,
-      title: Text(message),
+      title: Text(
+        message,
+        // Match in_app_notification_controller: toastification's BuiltInContent
+        // otherwise applies DefaultTextStyle(maxLines: 1) and clips the message.
+        maxLines: 6,
+        softWrap: true,
+        overflow: TextOverflow.visible,
+        textAlign: TextAlign.start,
+      ),
       type: type._toastificationType,
       alignment: Alignment.bottomLeft,
       autoCloseDuration: duration,

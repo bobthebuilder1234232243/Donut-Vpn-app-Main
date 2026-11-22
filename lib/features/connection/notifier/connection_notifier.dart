@@ -70,9 +70,15 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       if (event case Disconnected(connectionFailure: final failure?)) {
         loggy.warning("connection failed: $failure");
         Future.microtask(() => ref.read(Preferences.startedByUser.notifier).update(false));
+        // doOnData runs before this event becomes the new state, so this is the
+        // state we are leaving: only a started service can have leaked a tunnel.
+        final wasStarted = state.valueOrNull is Connecting || state.valueOrNull is Connected;
         // Only the status of an in-flight connect attempt is surfaced here; a
         // synchronous start failure is surfaced once by toggleConnection().
         if (state.valueOrNull is Connecting) _surfaceFailureOnce();
+        // The engine can die after the OS tunnel is up (e.g. NO_AVAILABLE_PROXIES),
+        // leaving VpnService/tun0 running with no core behind it: force a stop.
+        if (wasStarted) unawaited(_teardownLeakedTunnel(failure));
       }
       loggy.info("connection status: ${event.format()}");
     });
@@ -86,6 +92,9 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
   static const _connectSoftTimeout = Duration(seconds: 30);
   Timer? _connectTimeoutTimer;
   bool _failureSurfaced = false;
+  // Set while a failure-driven stop is in flight, so a failing Disconnected
+  // emitted by that stop (or a duplicate status) cannot start another teardown.
+  bool _tearingDown = false;
 
   /// Single owner of the engine-failure toast: shows it at most once per attempt.
   void _surfaceFailureOnce() {
@@ -109,6 +118,10 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
   Future<void> toggleConnection() async {
     try {
       final haptic = ref.read(hapticServiceProvider.notifier);
+      if (_tearingDown) {
+        loggy.warning("Ignoring connection attempt while tearing down leaked tunnel");
+        return;
+      }
       if (state case AsyncError()) {
         await haptic.lightImpact();
         await _connect();
@@ -177,6 +190,23 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     }
   }
 
+  /// Hard stop usable from ANY state: wedged Connecting, leaked tunnel, AsyncError.
+  /// Stops the native service/core through the normal disconnect path and resets
+  /// the status to Disconnected. Idempotent and never throws; shows no failure
+  /// toast because this is a user-initiated clean stop.
+  Future<void> forceDisconnect() async {
+    _connectTimeoutTimer?.cancel();
+    _failureSurfaced = false;
+    await ref.read(Preferences.startedByUser.notifier).update(false);
+    try {
+      // Same native stop as _disconnect(); bounded so a wedged core cannot hang the UI.
+      await _connectionRepo.disconnect().run().timeout(const Duration(seconds: 5));
+    } catch (e) {
+      loggy.warning("Ignored error while force disconnecting: $e");
+    }
+    state = const AsyncData(Disconnected());
+  }
+
   final _singleStart = SingleCall();
 
   Future<void> _connect() async {
@@ -229,6 +259,28 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     throw failure;
   }
 
+  /// The core can die after the tunnel is established, so connect() succeeded but
+  /// the status later turns into Disconnected(failure) while VpnService/tun0 is
+  /// still up. Stop the native service the same way a normal disconnect does:
+  /// core.stop() closes the VpnService file descriptor and stops the service.
+  Future<void> _teardownLeakedTunnel(ConnectionFailure failure) async {
+    if (_tearingDown) return;
+    _tearingDown = true;
+    _connectTimeoutTimer?.cancel();
+    loggy.warning("force-tearing down leaked VPN tunnel after start failure: $failure");
+    try {
+      // Bound it: a dead core must never leave the UI waiting on the stop.
+      final result = await _connectionRepo.disconnect().run().timeout(const Duration(seconds: 5));
+      final stopFailure = result.fold<ConnectionFailure?>((err) => err, (_) => null);
+      if (stopFailure != null) loggy.warning("error stopping leaked tunnel", stopFailure);
+    } catch (e) {
+      loggy.warning("Ignored connection error while tearing down leaked tunnel: $e");
+    } finally {
+      _tearingDown = false;
+      await ref.read(Preferences.startedByUser.notifier).update(false);
+    }
+  }
+
   Future<void> _disconnect() async {
     _connectTimeoutTimer?.cancel();
     final result = await _connectionRepo.disconnect().run();
@@ -253,6 +305,8 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     }
     try {
       // Bound the native stop so the timeout itself can never block the UI.
+      // _disconnect() -> connectionRepo.disconnect() -> core.stop(), which closes
+      // the VpnService file descriptor (tun0) exactly like a normal disconnect.
       await _disconnect().timeout(const Duration(seconds: 5));
     } catch (e) {
       loggy.warning("Ignored connection error in connect timeout: $e");

@@ -102,7 +102,7 @@ class VPNManager: ObservableObject {
             `protocol`.providerBundleIdentifier = Bundle.main.baseBundleIdentifier + ".DonutPacketTunnel"
             `protocol`.serverAddress = "localhost"
             newManager.protocolConfiguration = `protocol`
-            newManager.localizedDescription = "Donut Vpn"
+            newManager.localizedDescription = "Donut VPN"
             try await newManager.saveToPreferences()
             try await newManager.loadFromPreferences()
             self.manager = newManager
