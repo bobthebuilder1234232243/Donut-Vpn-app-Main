@@ -4,6 +4,7 @@ import 'package:gap/gap.dart';
 import 'package:donutclub/core/app_info/app_info_provider.dart';
 import 'package:donutclub/core/localization/translations.dart';
 import 'package:donutclub/core/router/bottom_sheets/bottom_sheets_notifier.dart';
+import 'package:donutclub/features/connection/notifier/connection_notifier.dart';
 import 'package:donutclub/features/home/widget/connection_button.dart';
 import 'package:donutclub/features/profile/notifier/active_profile_notifier.dart';
 import 'package:donutclub/features/profile/widget/profile_tile.dart';
@@ -79,7 +80,7 @@ class HomePage extends HookConsumerWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.center,
-                children: const [ConnectionButton(), ActiveProxyDelayIndicator()],
+                children: const [ConnectionButton(), ActiveProxyDelayIndicator(), _StopAllRoutingButton()],
               ),
             ),
           ),
@@ -129,6 +130,34 @@ class HomePage extends HookConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Panic control: stops the tunnel from ANY state (connecting, connected,
+/// wedged or errored). Always enabled because forceDisconnect() is idempotent.
+class _StopAllRoutingButton extends HookConsumerWidget {
+  const _StopAllRoutingButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 20),
+      child: FilledButton.icon(
+        onPressed: () async {
+          await ref.read(connectionNotifierProvider.notifier).forceDisconnect();
+        },
+        icon: const Icon(Icons.stop_circle_outlined, size: 20),
+        label: const Text('Stop All Routing'),
+        style: FilledButton.styleFrom(
+          backgroundColor: theme.colorScheme.error,
+          foregroundColor: theme.colorScheme.onError,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          shape: const StadiumBorder(),
+        ),
       ),
     );
   }

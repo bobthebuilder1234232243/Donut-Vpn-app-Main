@@ -329,13 +329,27 @@ jobs:
       # ---------------------------------------------------------------------
       # iOS (unsigned; macOS runner)
       # ---------------------------------------------------------------------
-      - name: Prepare iOS
+      - name: Prepare iOS Core
         if: contains(matrix.target, 'ios')
-        continue-on-error: true
+        run: make ios-prepare
+
+      - name: Clean iOS Build Environment
+        if: contains(matrix.target, 'ios')
         run: |
-          make ios-libs
+          flutter clean
+          rm -rf ios/Pods ios/Podfile.lock ios/Runner.xcworkspace
+
+      - name: Install iOS Dependencies
+        if: contains(matrix.target, 'ios')
+        run: |
+          flutter pub get
           cd ios
           pod install --repo-update
+          cd ..
+
+      - name: Generate App Icons
+        if: contains(matrix.target, 'ios')
+        run: dart run flutter_launcher_icons
 
       - name: Upload iOS core
         if: always() && contains(matrix.target, 'ios')

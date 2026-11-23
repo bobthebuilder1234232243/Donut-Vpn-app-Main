@@ -8,3 +8,7 @@
 BASE_BUNDLE_IDENTIFIER=apple.donutvpn.com
 SERVICE_IDENTIFIER=com.donutvpn.app
 DEVELOPMENT_TEAM=3JFTY5BP58
+
+// Expose FLUTTER_BUILD_NAME / FLUTTER_BUILD_NUMBER to the app extension so its
+// CFBundleShortVersionString and CFBundleVersion always match the host app.
+#include? "Flutter/Generated.xcconfig"

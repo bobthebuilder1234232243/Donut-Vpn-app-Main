@@ -12,7 +12,7 @@
 	<dict>
 		<key>apple.donutvpn.com</key>
 		<string>dist.apple.apple.donutvpn.com</string>
-		<key>apple.donutvpn.com.SingBoxPacketTunnel</key>
+		<key>apple.donutvpn.com.DonutPacketTunnel</key>
 		<string>dist.apple.apple.donutvpn.com.singboxpackettunnel</string>
 	</dict>
 	<key>signingCertificate</key>

@@ -189,6 +189,7 @@ flutter_launcher_icons:
   android: "ic_launcher"
   ios: true
   image_path: "assets/images/donut_logo.png" # UPDATED: Points to the newly centered logo
+  image_path_ios: "assets/images/donut_logo.png" # UPDATED: Same centered logo for every iOS size
   min_sdk_android: 21
   adaptive_icon_background: "#FFFFFF"
   adaptive_icon_foreground: "assets/images/donut_logo.png" # UPDATED: Points to the newly centered logo

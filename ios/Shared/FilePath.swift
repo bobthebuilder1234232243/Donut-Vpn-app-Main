@@ -16,9 +16,21 @@ public enum FilePath {
 public extension FilePath {
     static let groupName = "group.\(packageName)"
 
-    private static let defaultSharedDirectory: URL! = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: FilePath.groupName)
-
-    static let sharedDirectory = defaultSharedDirectory!
+    /// Resolves the shared App Group container, falling back to the app's own
+    /// Application Support directory when the group is not provisioned.
+    ///
+    /// `containerURL(forSecurityApplicationGroupIdentifier:)` returns `nil` when the
+    /// App Group entitlement is missing or was not granted by the signing profile
+    /// (development, enterprise or TrollStore). Force-unwrapping that value traps at
+    /// launch with EXC_BREAKPOINT / SIGTRAP, so the app degrades gracefully instead.
+    static let sharedDirectory: URL = {
+        if let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupName) {
+            return container
+        }
+        let fallback = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        NSLog("[DonutVPN] App Group %@ is unavailable; falling back to %@", groupName, fallback.path)
+        return fallback
+    }()
 
     static let cacheDirectory = sharedDirectory
         .appendingPathComponent("Library", isDirectory: true)
