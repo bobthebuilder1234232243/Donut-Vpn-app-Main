@@ -47,6 +47,8 @@ open class ExtensionProvider: NEPacketTunnelProvider {
             let sharedDir = FilePath.sharedDirectory.relativePath
             let workDir = FilePath.workingDirectory.relativePath
             let cacheDir = FilePath.cacheDirectory.relativePath
+            NSLog("[DonutVPN] packet-tunnel starting core with dir: %@ (working: %@, temp: %@, listen: 127.0.0.1:%ld)",
+                  sharedDir, workDir, cacheDir, grpcServiceModePort)
             if platformInterface == nil {
                 platformInterface = ExtensionPlatformInterface(self)
             }

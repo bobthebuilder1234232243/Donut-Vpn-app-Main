@@ -5,8 +5,10 @@
 //  Created by GFWFighter on 10/23/23.
 //
 
+import Foundation
 import Flutter
 import Combine
+import Darwin
 import DonutCore
 
 public class MethodHandler: NSObject, FlutterPlugin {
@@ -62,16 +64,46 @@ public class MethodHandler: NSObject, FlutterPlugin {
             result(true)
         case "setup":
                 Task {
-                    guard
-                        let args = call.arguments as? [String: Any?],
-                        let baseDir = args["baseDir"] as? String,
-                        let workingDir = args["workingDir"] as? String,
-                        let tempDir = args["tempDir"] as? String,
-                        let mode = args["mode"] as? Int,
-                        let grpcPort = args["grpcPort"] as? Int
-                    else {
+                    guard let args = call.arguments as? [String: Any?] else {
                         result(FlutterError(code: "INVALID_ARGS", message: nil, details: nil))
                         return
+                    }
+                    // Under TrollStore the App Group container is not provisioned, so
+                    // fall back to the app's own directories exactly like
+                    // FilePath.sharedDirectory does. The core start must never be
+                    // skipped because a shared path is unavailable.
+                    let baseDir = (args["baseDir"] as? String) ?? FilePath.sharedDirectory.path
+                    let workingDir = (args["workingDir"] as? String) ?? FilePath.workingDirectory.path
+                    let tempDir = (args["tempDir"] as? String) ?? FilePath.cacheDirectory.path
+                    guard let grpcPort = args["grpcPort"] as? Int else {
+                        result(FlutterError(code: "INVALID_ARGS", message: nil, details: nil))
+                        return
+                    }
+
+                    NSLog("[DonutVPN] starting core with dir: %@ (working: %@, temp: %@, listen: 127.0.0.1:%ld)",
+                          baseDir, workingDir, tempDir, grpcPort)
+
+                    // libbox.Setup and the core's stderr redirect assume these paths
+                    // exist. When one is missing the gRPC listener silently never comes
+                    // up, while MobileSetup still reports success.
+                    let fileManager = FileManager.default
+                    let coreDirectories = [
+                        baseDir,
+                        workingDir,
+                        tempDir,
+                        URL(fileURLWithPath: workingDir).appendingPathComponent("data").path
+                    ]
+                    for directory in coreDirectories {
+                        do {
+                            try fileManager.createDirectory(atPath: directory, withIntermediateDirectories: true)
+                        } catch {
+                            NSLog("[DonutVPN] cannot create core directory %@: %@", directory, error.localizedDescription)
+                            result(FlutterError(code: "CORE_DIR", message: "cannot create \(directory): \(error.localizedDescription)", details: nil))
+                            return
+                        }
+                    }
+                    if !fileManager.changeCurrentDirectoryPath(baseDir) {
+                        NSLog("[DonutVPN] warning: cannot enter %@", baseDir)
                     }
                     VPNConfig.shared.baseDir=baseDir
                     VPNConfig.shared.workingDir=workingDir
@@ -92,9 +124,22 @@ public class MethodHandler: NSObject, FlutterPlugin {
                     )
                     
                     if let error {
+                        NSLog("[DonutVPN] core setup failed: %@", error.localizedDescription)
                         result(FlutterError(code: String(error.code), message: error.localizedDescription, details: nil))
                         return
                     }
+
+                    guard await Self.waitUntilListening(port: grpcPort) else {
+                        NSLog("[DonutVPN] core did not bind 127.0.0.1:%ld (base: %@)", grpcPort, baseDir)
+                        result(FlutterError(
+                            code: "CORE_NOT_LISTENING",
+                            message: "core is not listening on 127.0.0.1:\(grpcPort); base=\(baseDir) working=\(workingDir)",
+                            details: nil
+                        ))
+                        return
+                    }
+                    NSLog("[DonutVPN] core is listening on 127.0.0.1:%ld", grpcPort)
+
                     do {
                         try await VPNManager.shared.setup()
                     } catch {
@@ -230,6 +275,36 @@ public class MethodHandler: NSObject, FlutterPlugin {
         }
     }
     
+    /// The core binds synchronously inside `MobileSetup`, but a failure in
+    /// `libbox.Setup` is swallowed by its panic recovery, so confirm the port is
+    /// really held before reporting success to Dart.
+    private static func waitUntilListening(port: Int, timeout: TimeInterval = 5) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if isPortInUse(port) { return true }
+            try? await Task.sleep(nanoseconds: 100 * NSEC_PER_MSEC)
+        }
+        return isPortInUse(port)
+    }
+
+    /// A bind probe (not a connect probe): it never opens a client session against the core.
+    private static func isPortInUse(_ port: Int) -> Bool {
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        guard fd >= 0 else { return false }
+        defer { _ = close(fd) }
+        var addr = sockaddr_in()
+        addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = in_port_t(UInt16(truncatingIfNeeded: port).bigEndian)
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+        let rc = withUnsafePointer(to: &addr) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
+                bind(fd, sockaddrPointer, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        return rc != 0 && errno == EADDRINUSE
+    }
+
     private func waitForStop() -> Future<Void, Never> {
         return Future { promise in
             var cancellable: AnyCancellable? = nil

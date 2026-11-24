@@ -27,11 +27,27 @@ class VPNManager: ObservableObject {
     private var cancelBag: Set<AnyCancellable> = []
     
     private var observer: NSObjectProtocol?
-    private var manager = NEVPNManager.shared()
+    /// Only ever points at this app's own tunnel configuration. `nil` until
+    /// `loadVPNPreference()` has verified ownership, so a configuration that
+    /// belongs to another app can never be saved or stopped.
+    private var manager: NEVPNManager?
     private var loaded: Bool = false
     private var timer: Timer?
             
     static let shared: VPNManager = VPNManager()
+
+    /// Bundle identifier of the Packet Tunnel provider shipped with this app.
+    /// Ownership is matched on this value - never on the display name - because
+    /// `loadAllFromPreferences()` and `NEVPNManager.shared()` can surface
+    /// configurations that other apps created (observed under TrollStore).
+    private static var providerBundleIdentifier: String {
+        Bundle.main.baseBundleIdentifier + ".DonutPacketTunnel"
+    }
+
+    private func isOwnConfiguration(_ candidate: NEVPNManager) -> Bool {
+        guard let proto = candidate.protocolConfiguration as? NETunnelProviderProtocol else { return false }
+        return proto.providerBundleIdentifier == Self.providerBundleIdentifier
+    }
         
     @Published private(set) var state: NEVPNStatus = .invalid
     @Published private(set) var alert: VPNManagerAlert = .init(alert: nil, message: nil)
@@ -93,13 +109,20 @@ class VPNManager: ObservableObject {
     private func loadVPNPreference() async throws {
         do {
             let managers = try await NETunnelProviderManager.loadAllFromPreferences()
-            if let manager = managers.first {
-                self.manager = manager
+            // Adopt only the configuration this app owns. Taking `managers.first`
+            // picked up other apps' tunnels (Proton VPN), and later saves/stops then
+            // hit "permission denied" and sent stop commands to that tunnel.
+            let foreign = managers.filter { !isOwnConfiguration($0) }
+            if !foreign.isEmpty {
+                NSLog("[DonutVPN] ignoring %ld VPN configuration(s) owned by other apps", foreign.count)
+            }
+            if let own = managers.first(where: { isOwnConfiguration($0) }) {
+                self.manager = own
                 return
             }
             let newManager = NETunnelProviderManager()
             let `protocol` = NETunnelProviderProtocol()
-            `protocol`.providerBundleIdentifier = Bundle.main.baseBundleIdentifier + ".DonutPacketTunnel"
+            `protocol`.providerBundleIdentifier = Self.providerBundleIdentifier
             `protocol`.serverAddress = "localhost"
             newManager.protocolConfiguration = `protocol`
             newManager.localizedDescription = "Donut VPN"
@@ -112,6 +135,13 @@ class VPNManager: ObservableObject {
     }
     
     private func enableVPNManager() async throws {
+        guard let manager, isOwnConfiguration(manager) else {
+            throw NSError(
+                domain: "DonutVPN",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "refusing to save a VPN configuration this app does not own"]
+            )
+        }
         manager.isEnabled = true
         let rule = NEOnDemandRuleConnect()
         rule.interfaceTypeMatch = .any
@@ -155,16 +185,12 @@ class VPNManager: ObservableObject {
         }
         $state.filter { $0 == .disconnected || $0 == .invalid }.first().sink { [weak self] _ in
             Task { [weak self] () in
-                self?.manager = .shared()
-                do {
-                    let managers = try await NETunnelProviderManager.loadAllFromPreferences()
-                    for manager in managers ?? [] {
-                        try await manager.removeFromPreferences()
-                    }
-                    try await self?.loadVPNPreference()
-                } catch {
-                    print(error.localizedDescription)
-                }
+                guard let self else { return }
+                // Never enumerate or remove VPN configurations: only this app's own
+                // tunnel may be touched. Dropping the reference and reloading
+                // re-resolves it by provider bundle identifier.
+                self.manager = nil
+                try? await self.loadVPNPreference()
             }
         }.store(in: &cancelBag)
         
@@ -177,7 +203,8 @@ class VPNManager: ObservableObject {
             isConnectedToAnyVPN = isAnyVPNConnected
         }
         guard state == .connected else { return }
-        guard let connection = manager.connection as? NETunnelProviderSession else { return }
+        guard let manager, isOwnConfiguration(manager),
+              let connection = manager.connection as? NETunnelProviderSession else { return }
         do {
             try connection.sendProviderMessage("stats".data(using: .utf8)!) { [weak self] response in
                 guard
@@ -205,6 +232,10 @@ class VPNManager: ObservableObject {
 //        guard state == .disconnected else { return }
         do {
             try await enableVPNManager()
+            guard let manager, isOwnConfiguration(manager) else {
+                NSLog("[DonutVPN] refusing to start: no VPN configuration owned by this app")
+                return
+            }
             try manager.connection.startVPNTunnel(options: [
                 "Config": config as NSString,
                 "GrpcServiceModePort":NSNumber(value: grpcServiceModePort),
@@ -218,6 +249,18 @@ class VPNManager: ObservableObject {
     }
     
     func disconnect() {
+        // Never stop a tunnel this app does not own: a foreign configuration here
+        // makes iOS log "Received a stop command from Runner[PID]" in the other
+        // app's session and fails with "permission denied" on save.
+        guard let manager else {
+            NSLog("[DonutVPN] disconnect skipped: no owned VPN configuration loaded")
+            return
+        }
+        guard isOwnConfiguration(manager) else {
+            NSLog("[DonutVPN] disconnect skipped: configuration %@ is not ours", manager.localizedDescription ?? "unknown")
+            self.manager = nil
+            return
+        }
         if manager.isOnDemandEnabled {
             manager.isOnDemandEnabled = false
             manager.onDemandRules = []

@@ -349,7 +349,38 @@ jobs:
 
       - name: Generate App Icons
         if: contains(matrix.target, 'ios')
-        run: dart run flutter_launcher_icons
+        run: |
+          set -o pipefail
+          touch "$RUNNER_TEMP/donut-icons.stamp"
+          dart run flutter_launcher_icons 2>&1 | tee "$RUNNER_TEMP/flutter_launcher_icons.log"
+
+      - name: Verify iOS App Icons Were Regenerated
+        if: contains(matrix.target, 'ios')
+        run: |
+          set -euo pipefail
+          ICON_DIR=ios/Runner/Assets.xcassets/AppIcon.appiconset
+          STAMP="$RUNNER_TEMP/donut-icons.stamp"
+          LOG="$RUNNER_TEMP/flutter_launcher_icons.log"
+
+          echo "--- Icon source ---"
+          ls -l assets/images/donut_logo.png
+          test -s assets/images/donut_logo.png
+          test -s "$ICON_DIR/Contents.json"
+
+          echo "--- AppIcon PNGs written since generation started ---"
+          REGENERATED=$(find "$ICON_DIR" -name '*.png' -newer "$STAMP" -print)
+          echo "$REGENERATED"
+
+          if [ -z "$REGENERATED" ]; then
+            echo "FAIL: icons not regenerated - no PNG in $ICON_DIR is newer than $STAMP"
+            echo "--- flutter_launcher_icons output ---"
+            cat "$LOG" || true
+            exit 1
+          fi
+
+          COUNT=$(printf '%s\n' "$REGENERATED" | wc -l | tr -d ' ')
+          TOTAL=$(find "$ICON_DIR" -name '*.png' | wc -l | tr -d ' ')
+          echo "OK: $COUNT/$TOTAL AppIcon PNGs regenerated in this run"
 
       - name: Upload iOS core
         if: always() && contains(matrix.target, 'ios')
