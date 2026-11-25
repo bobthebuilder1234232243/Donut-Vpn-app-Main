@@ -83,6 +83,13 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
   await _init("logger controller", () => LoggerController.postInit(debug));
 
   Logger.bootstrap.info(appInfo.format());
+  // Build provenance: proves the installed binary was compiled from this tree.
+  // Run `idevicesyslog | grep "[DonutVPN] PROVENANCE"` after install; if this
+  // line is absent the IPA is stale and every later check is meaningless.
+  Logger.bootstrap.info(
+    "[DonutVPN] PROVENANCE v${appInfo.version}+${appInfo.buildNumber} "
+    "ports=17078/17079 ownership-guard=ON icon-root-fix=ON profile-idempotent=ON",
+  );
 
   await _init("profile repository", () => container.read(profileRepositoryProvider.future));
 

@@ -18,7 +18,7 @@ class VPNConfig: ObservableObject {
     var activeProfileName: String = ""
     
     @Stored(key: "VPN.GrpcServiceModePort")
-    var grpcServiceModePort: Int = 0
+    var grpcServiceModePort: Int = 17079
     
     @Stored(key: "VPN.workingDir")
     var workingDir: String = ""

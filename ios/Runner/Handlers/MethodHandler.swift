@@ -79,6 +79,20 @@ public class MethodHandler: NSObject, FlutterPlugin {
                         result(FlutterError(code: "INVALID_ARGS", message: nil, details: nil))
                         return
                     }
+                    // One port, enforced at the native boundary. The foreground core
+                    // must listen on 17078; anything else - notably 0, which makes the
+                    // kernel pick an ephemeral port - is what produced
+                    // "UNAVAILABLE ... port = 515xx" on device.
+                    guard grpcPort == 17078 else {
+                        NSLog("[DonutVPN] invalid grpc port requested=%ld (expected 17078)", grpcPort)
+                        result(FlutterError(
+                            code: "INVALID_GRPC_PORT",
+                            message: "expected 17078, got \(grpcPort)",
+                            details: nil
+                        ))
+                        return
+                    }
+                    NSLog("[DonutVPN] grpc port requested=%ld resolved=127.0.0.1:%ld", grpcPort, grpcPort)
 
                     NSLog("[DonutVPN] starting core with dir: %@ (working: %@, temp: %@, listen: 127.0.0.1:%ld)",
                           baseDir, workingDir, tempDir, grpcPort)
@@ -108,6 +122,20 @@ public class MethodHandler: NSObject, FlutterPlugin {
                     VPNConfig.shared.baseDir=baseDir
                     VPNConfig.shared.workingDir=workingDir
                     VPNConfig.shared.tempDir=tempDir
+
+                    // Fail fast instead of racing a previous core instance that still
+                    // holds the port; otherwise the new listener never binds and Dart
+                    // only sees "connection refused".
+                    if Self.isPortInUse(grpcPort) {
+                        NSLog("[DonutVPN] port %ld already in use before core start", grpcPort)
+                        result(FlutterError(
+                            code: "PORT_IN_USE",
+                            message: "127.0.0.1:\(grpcPort) is already in use",
+                            details: nil
+                        ))
+                        return
+                    }
+
                     var error: NSError?
                     let opts = MobileSetupOptions()
                     opts.basePath = baseDir
@@ -279,6 +307,11 @@ public class MethodHandler: NSObject, FlutterPlugin {
     /// `libbox.Setup` is swallowed by its panic recovery, so confirm the port is
     /// really held before reporting success to Dart.
     private static func waitUntilListening(port: Int, timeout: TimeInterval = 5) async -> Bool {
+        // Port 0 is never a valid listen port; probing it would silently "succeed".
+        guard port > 0 else {
+            NSLog("[DonutVPN] refusing to wait on port %ld", port)
+            return false
+        }
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if isPortInUse(port) { return true }
@@ -289,6 +322,7 @@ public class MethodHandler: NSObject, FlutterPlugin {
 
     /// A bind probe (not a connect probe): it never opens a client session against the core.
     private static func isPortInUse(_ port: Int) -> Bool {
+        guard port > 0 else { return false }
         let fd = socket(AF_INET, SOCK_STREAM, 0)
         guard fd >= 0 else { return false }
         defer { _ = close(fd) }

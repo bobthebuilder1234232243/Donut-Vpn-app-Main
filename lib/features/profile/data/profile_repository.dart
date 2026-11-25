@@ -64,6 +64,12 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
         }
       }
 
+      // Report (never rewrite) rows that share a normalized URL.
+      final duplicates = await _profileDataSource.countDuplicateUrls();
+      if (duplicates > 0) {
+        loggy.warning("found $duplicates duplicate profile URL row(s); leaving them untouched");
+      }
+
       return right(unit);
     }, ProfileUnexpectedFailure.new);
   }
@@ -126,7 +132,7 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
   @override
   TaskEither<ProfileFailure, Unit> upsertRemote(String url, {UserOverride? userOverride, CancelToken? cancelToken}) =>
       TaskEither.tryCatch(
-        () async => await _profileDataSource.getByUrl(url).then((profEntry) => profEntry?.toEntity()),
+        () async => await _profileDataSource.getByUrlExact(url).then((profEntry) => profEntry?.toEntity()),
         ProfileFailure.unexpected,
       ).flatMap((profEntity) {
         // if profile is null, generate id
@@ -174,7 +180,7 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
                         false,
                       ).flatMap(
                         (unit) => TaskEither.tryCatch(() async {
-                          await _profileDataSource.insert(profEntity);
+                          await _profileDataSource.upsert(profEntity);
                           return unit;
                         }, ProfileFailure.unexpected),
                       ),
@@ -204,7 +210,11 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
                       false,
                     ).flatMap(
                       (unit) => TaskEither.tryCatch(() async {
-                        await _profileDataSource.insert(profEntity);
+                        final effectiveId = await _profileDataSource.upsert(profEntity);
+                        if (effectiveId != id) {
+                          // Reused an existing local profile: keep its config file in sync.
+                          await file.copy(_profilePathResolver.file(effectiveId).path);
+                        }
                         return unit;
                       }, ProfileFailure.unexpected),
                     ),

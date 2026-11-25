@@ -120,6 +120,7 @@ class VPNManager: ObservableObject {
                 self.manager = own
                 return
             }
+            NSLog("[DonutVPN] saving own configuration %@", Self.providerBundleIdentifier)
             let newManager = NETunnelProviderManager()
             let `protocol` = NETunnelProviderProtocol()
             `protocol`.providerBundleIdentifier = Self.providerBundleIdentifier
@@ -130,7 +131,11 @@ class VPNManager: ObservableObject {
             try await newManager.loadFromPreferences()
             self.manager = newManager
         } catch {
-            print(error.localizedDescription)	
+            // No provisioned App Group / VPN entitlement under TrollStore means this
+            // save can legitimately fail. Leave manager nil: never fall back to a
+            // configuration that belongs to another app.
+            NSLog("[DonutVPN] failed to save own configuration: %@", error.localizedDescription)
+            self.manager = nil	
         }
     }
     
@@ -149,11 +154,15 @@ class VPNManager: ObservableObject {
         manager.onDemandRules = [rule]
         manager.isOnDemandEnabled = true
         
+        NSLog("[DonutVPN] saving own configuration %@", Self.providerBundleIdentifier)
         do {
             try await manager.saveToPreferences()
             try await manager.loadFromPreferences()
         } catch {
-            print(error.localizedDescription)
+            // Surface the failure: connect() must abort before startVPNTunnel rather
+            // than proceed with an unpersisted configuration.
+            NSLog("[DonutVPN] refusing to save: %@", error.localizedDescription)
+            throw error
         }
     }
     
@@ -234,7 +243,11 @@ class VPNManager: ObservableObject {
             try await enableVPNManager()
             guard let manager, isOwnConfiguration(manager) else {
                 NSLog("[DonutVPN] refusing to start: no VPN configuration owned by this app")
-                return
+                throw NSError(
+                    domain: "DonutVPN",
+                    code: 2,
+                    userInfo: [NSLocalizedDescriptionKey: "no VPN configuration owned by this app"]
+                )
             }
             try manager.connection.startVPNTunnel(options: [
                 "Config": config as NSString,
@@ -243,7 +256,10 @@ class VPNManager: ObservableObject {
             ])
             
         } catch {
-            print(error.localizedDescription)
+            // Must reach Dart: the connect flow maps this to startFailed and shows the
+            // single engine-failure toast instead of silently reporting success.
+            NSLog("[DonutVPN] connect failed: %@", error.localizedDescription)
+            throw error
         }
         connectTime = .now
     }
@@ -274,6 +290,7 @@ class VPNManager: ObservableObject {
         }
 
 //        guard state == .connected else { return }
+        NSLog("[DonutVPN] stopping own configuration only")
         manager.connection.stopVPNTunnel()
     }
 }

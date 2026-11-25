@@ -23,7 +23,17 @@ open class ExtensionProvider: NEPacketTunnelProvider {
             
             // Extract options with better error handling
             let disableMemoryLimit = false && (options?["DisableMemoryLimit"] as? NSString as? String ?? "NO") == "YES" 
-            let grpcServiceModePort = (options?["GrpcServiceModePort"] as? NSNumber)?.intValue ?? 17079
+            let requestedPort = (options?["GrpcServiceModePort"] as? NSNumber)?.intValue ?? 17079
+            // The app always uses 17079 for the tunnel. A 0 (the old VPNConfig
+            // default) or any out-of-range value makes the core bind an ephemeral
+            // port that the Dart client never connects to.
+            let grpcServiceModePort: Int
+            if requestedPort <= 0 || requestedPort > 65535 {
+                NSLog("[DonutVPN] invalid GrpcServiceModePort %ld, using 17079", requestedPort)
+                grpcServiceModePort = 17079
+            } else {
+                grpcServiceModePort = requestedPort
+            }
             
             let config = options?["Config"] as? NSString as? String ?? ""
             
@@ -63,6 +73,8 @@ open class ExtensionProvider: NEPacketTunnelProvider {
             opts.debug = false
             opts.mode = 4
             opts.fixAndroidStack = false
+
+            NSLog("[DonutVPN] packet-tunnel listening on %@", opts.listen)
 
             MobileSetup(opts,
                 platformInterface,

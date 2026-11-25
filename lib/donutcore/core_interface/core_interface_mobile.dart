@@ -41,6 +41,11 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
         ? MTLSChannelCredentials(serverPublicKey: serverPublicKey, clientKey: cert)
         : const ChannelCredentials.insecure();
     _debug = debug;
+    // Port invariant: a build that passes anything other than 17078/17079 here is
+    // stale or misconfigured. The native side rejects it too, but failing here
+    // names the source instead of surfacing as a gRPC UNAVAILABLE on a random port.
+    assert(portFront == 17078 && portBack == 17079, 'unexpected core ports: $portFront/$portBack');
+    loggy.debug("[DonutVPN] core ports front=$portFront back=$portBack");
     final helloClient = HelloClient(
       ClientChannel(
         '127.0.0.1',
@@ -105,6 +110,7 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     // if (!await waitUntilPort(portBack, false, stop)) return const CoreStatus.stopped(alert: CoreAlert.createService);
     if (!await stop()) return const CoreStatus.stopped(alert: CoreAlert.createService);
     _status.clean();
+    assert(portBack == 17079, 'unexpected background port: $portBack');
     await methodChannel.invokeMethod("start", {
       "path": path,
       "name": name,

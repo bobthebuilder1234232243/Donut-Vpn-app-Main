@@ -347,6 +347,24 @@ jobs:
           pod install --repo-update
           cd ..
 
+      - name: Verify Build Provenance Markers
+        if: contains(matrix.target, 'ios')
+        run: |
+          set -euo pipefail
+          # The provenance banner is the only way to tell a fresh IPA from a stale one
+          # on device: grep the syslog for "[DonutVPN] PROVENANCE" after installing.
+          grep -q "PROVENANCE" lib/bootstrap.dart || (echo "FAIL: provenance banner missing from bootstrap" && exit 1)
+          grep -q "ports=17078/17079" lib/bootstrap.dart || (echo "FAIL: provenance port list missing" && exit 1)
+          grep -q "PROVENANCE" ios/Runner/AppDelegate.swift || (echo "FAIL: provenance NSLog missing from AppDelegate" && exit 1)
+          grep -q "portFront = 17078" lib/donutcore/core_interface/core_interface_mobile.dart || (echo "FAIL: portFront drifted" && exit 1)
+          grep -q "portBack = 17079" lib/donutcore/core_interface/core_interface_mobile.dart || (echo "FAIL: portBack drifted" && exit 1)
+          echo "--- provenance string compiled into this artifact ---"
+          grep -A2 "PROVENANCE" lib/bootstrap.dart
+          grep "PROVENANCE" ios/Runner/AppDelegate.swift
+          echo "--- core ports ---"
+          grep "portFront = \|portBack = " lib/donutcore/core_interface/core_interface_mobile.dart
+          echo "OK: provenance markers and port constants are in the tree"
+
       - name: Generate App Icons
         if: contains(matrix.target, 'ios')
         run: |
@@ -382,6 +400,24 @@ jobs:
           TOTAL=$(find "$ICON_DIR" -name '*.png' | wc -l | tr -d ' ')
           echo "OK: $COUNT/$TOTAL AppIcon PNGs regenerated in this run"
 
+          echo "--- Icon root-cause guards ---"
+          # An Icon Composer bundle in the target overrides AppIcon.appiconset, so
+          # regenerating the catalog proves nothing while this file exists.
+          if [ -e ios/Runner/AppIcon.icon ]; then
+            echo "FAIL: ios/Runner/AppIcon.icon is present - it overrides AppIcon.appiconset"
+            exit 1
+          fi
+          if grep -q "ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = AppIcon" ios/Runner.xcodeproj/project.pbxproj; then
+            echo "FAIL: ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS must be YES, not AppIcon"
+            exit 1
+          fi
+          APPICON_NAME_COUNT=$(grep -c "ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon" ios/Runner.xcodeproj/project.pbxproj)
+          if [ "$APPICON_NAME_COUNT" -lt 3 ]; then
+            echo "FAIL: ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon found in only $APPICON_NAME_COUNT config(s)"
+            exit 1
+          fi
+          echo "OK: icon root-cause guards passed ($APPICON_NAME_COUNT configs name AppIcon)"
+
       - name: Upload iOS core
         if: always() && contains(matrix.target, 'ios')
         uses: actions/upload-artifact@v4
@@ -394,6 +430,25 @@ jobs:
       - name: Build unsigned iOS app
         if: contains(matrix.target, 'ios')
         run: flutter build ios --release --no-codesign
+
+      - name: Verify Packaged App Icon
+        if: contains(matrix.target, 'ios')
+        run: |
+          set -euo pipefail
+          APP=build/ios/iphoneos/Runner.app
+          test -d "$APP" || (echo "FAIL: $APP not found" && exit 1)
+          test -f "$APP/Assets.car" || (echo "FAIL: Assets.car missing from the packaged app" && exit 1)
+          if [ -e "$APP/AppIcon.icon" ]; then
+            echo "FAIL: AppIcon.icon was copied into the packaged app and overrides the catalog"
+            exit 1
+          fi
+          xcrun --sdk iphoneos assetutil --info "$APP/Assets.car" > "$RUNNER_TEMP/assets.json"
+          if ! grep -q '"Name" : "AppIcon"' "$RUNNER_TEMP/assets.json"; then
+            echo "FAIL: no AppIcon renditions in the packaged Assets.car"
+            head -40 "$RUNNER_TEMP/assets.json" || true
+            exit 1
+          fi
+          echo "OK: packaged Assets.car contains AppIcon renditions"
 
       - name: Package Unsigned IPA
         if: always() && contains(matrix.target, 'ios')

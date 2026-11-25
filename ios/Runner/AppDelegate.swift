@@ -9,6 +9,12 @@ import Sentry
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
+        // Printed before any Flutter work so a stale IPA is identifiable from
+        // syslog even when the Dart side never reaches bootstrap.
+        let shortVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let buildNumber = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+        NSLog("[DonutVPN] PROVENANCE v%@+%@ ports=17078/17079 ownership-guard=ON icon-root-fix=ON profile-idempotent=ON",
+              shortVersion, buildNumber)
         setupFileManager()
         registerHandlers()
         GeneratedPluginRegistrant.register(with: self)
