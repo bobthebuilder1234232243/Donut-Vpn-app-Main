@@ -180,7 +180,7 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
                         false,
                       ).flatMap(
                         (unit) => TaskEither.tryCatch(() async {
-                          await _profileDataSource.upsert(profEntity);
+                          await _profileDataSource.upsertProfile(profEntity);
                           return unit;
                         }, ProfileFailure.unexpected),
                       ),
@@ -210,7 +210,7 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
                       false,
                     ).flatMap(
                       (unit) => TaskEither.tryCatch(() async {
-                        final effectiveId = await _profileDataSource.upsert(profEntity);
+                        final effectiveId = await _profileDataSource.upsertProfile(profEntity);
                         if (effectiveId != id) {
                           // Reused an existing local profile: keep its config file in sync.
                           await file.copy(_profilePathResolver.file(effectiveId).path);

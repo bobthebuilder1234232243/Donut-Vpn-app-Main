@@ -1,7 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:donutclub/core/db/db.dart';
-import 'package:donutclub/features/profile/data/profile_data_mapper.dart';
 import 'package:donutclub/features/profile/model/profile_entity.dart';
 import 'package:donutclub/features/profile/model/profile_sort_enum.dart';
 import 'package:donutclub/utils/utils.dart';
@@ -16,7 +15,7 @@ abstract interface class ProfileDataSource {
   Future<ProfileEntry?> getByUrlLoose(String url);
   Future<ProfileEntry?> getByName(String name);
   Future<ProfileEntry?> getByNameExact(String name);
-  Future<String> upsert(ProfileEntity profile);
+  Future<String> upsertProfile(ProfileEntriesCompanion entry);
   Future<int> countDuplicateUrls();
   Stream<ProfileEntry?> watchActiveProfile();
   Stream<int> watchProfilesCount();
@@ -140,33 +139,46 @@ class ProfileDao extends DatabaseAccessor<Db> with _$ProfileDaoMixin, InfraLogge
 
   /// Insert-or-update by identity, in one transaction.
   ///
-  /// remote -> normalized URL, local -> normalized name. An existing row keeps its
-  /// id, its `active` flag and its stored name unless a [UserOverride] supplies a
-  /// new one. Only genuinely new rows get a deterministic "name (2)" suffix.
+  /// Takes the [ProfileEntriesCompanion] produced by the parser (the same type
+  /// [insert] and [edit] take); identity is read from it: remote -> normalized
+  /// URL, local -> normalized name. An existing row keeps its id, its `active`
+  /// flag and its stored name unless the entry carries a `userOverride`. Only
+  /// genuinely new rows get a deterministic "name (2)" suffix.
+  /// Returns the id of the row that actually holds the profile.
   @override
-  Future<String> upsert(ProfileEntity profile) async {
+  Future<String> upsertProfile(ProfileEntriesCompanion entry) async {
     return transaction(() async {
-      final isRemote = profile is RemoteProfileEntity;
-      final name = profile.map(remote: (rp) => rp.name, local: (lp) => lp.name);
-      final active = profile.map(remote: (rp) => rp.active, local: (lp) => lp.active);
-      final id = profile.map(remote: (rp) => rp.id, local: (lp) => lp.id);
-      final userOverride = profile.map(remote: (rp) => rp.userOverride, local: (lp) => lp.userOverride);
+      final id = entry.id.value;
+      final type = entry.type.value;
+      final isRemote = type == ProfileType.remote;
+      final name = entry.name.value;
+      final active = entry.active.valueOrNull ?? false;
+      final url = entry.url.valueOrNull;
+      final hasUserOverride = entry.userOverride.valueOrNull != null;
 
       final existing = isRemote
-          ? await getByUrlExact((profile as RemoteProfileEntity).url)
+          ? (url == null ? null : await getByUrlExact(url))
           : await getByNameExact(name);
-      final sameKind =
-          existing != null && existing.type == (isRemote ? ProfileType.remote : ProfileType.local);
+      final sameKind = existing != null && existing.type == type;
 
       if (existing != null && sameKind) {
         if (active) {
           await update(profileEntries).write(const ProfileEntriesCompanion(active: Value(false)));
         }
-        var updateEntry = profile.toUpdateEntry();
-        if (userOverride == null) {
+        final updateEntry = ProfileEntriesCompanion(
+          lastUpdate: entry.lastUpdate,
+          updateInterval: entry.updateInterval,
+          populatedHeaders: entry.populatedHeaders,
+          userOverride: entry.userOverride,
+          upload: entry.upload,
+          download: entry.download,
+          total: entry.total,
+          expire: entry.expire,
+          webPageUrl: entry.webPageUrl,
+          supportUrl: entry.supportUrl,
           // A refresh must never rename the user's profile.
-          updateEntry = updateEntry.copyWith(name: const Value.absent());
-        }
+          name: hasUserOverride ? entry.name : const Value<String>.absent(),
+        );
         await (update(profileEntries)..where((tbl) => tbl.id.equals(existing.id))).write(updateEntry);
         loggy.log(LogLevel.info, 'profile upsert updated in place: [${existing.id}]');
         return existing.id;
@@ -176,7 +188,7 @@ class ProfileDao extends DatabaseAccessor<Db> with _$ProfileDaoMixin, InfraLogge
       if (active) {
         await update(profileEntries).write(const ProfileEntriesCompanion(active: Value(false)));
       }
-      await into(profileEntries).insert(profile.toInsertEntry().copyWith(name: Value(uniqueName)));
+      await into(profileEntries).insert(entry.copyWith(name: Value(uniqueName)));
       loggy.log(LogLevel.info, 'profile upsert inserted: [$id] as [$uniqueName]');
       return id;
     });
