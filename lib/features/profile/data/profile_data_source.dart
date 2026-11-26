@@ -152,9 +152,9 @@ class ProfileDao extends DatabaseAccessor<Db> with _$ProfileDaoMixin, InfraLogge
       final type = entry.type.value;
       final isRemote = type == ProfileType.remote;
       final name = entry.name.value;
-      final active = entry.active.valueOrNull ?? false;
-      final url = entry.url.valueOrNull;
-      final hasUserOverride = entry.userOverride.valueOrNull != null;
+      final active = entry.active.value ?? false;
+      final url = entry.url.value;
+      final hasUserOverride = entry.userOverride.value != null;
 
       final existing = isRemote
           ? (url == null ? null : await getByUrlExact(url))

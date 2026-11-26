@@ -75,24 +75,15 @@ public class MethodHandler: NSObject, FlutterPlugin {
                     let baseDir = (args["baseDir"] as? String) ?? FilePath.sharedDirectory.path
                     let workingDir = (args["workingDir"] as? String) ?? FilePath.workingDirectory.path
                     let tempDir = (args["tempDir"] as? String) ?? FilePath.cacheDirectory.path
-                    guard let grpcPort = args["grpcPort"] as? Int else {
-                        result(FlutterError(code: "INVALID_ARGS", message: nil, details: nil))
-                        return
+                    // FORCE port 17078. The Dart-supplied value is ignored on purpose:
+                    // passing 0 (or anything else) lets the kernel pick an ephemeral
+                    // port, which is what produced "UNAVAILABLE ... port = 515xx" on
+                    // device while Dart kept dialling 17078.
+                    let grpcPort = 17078
+                    if let requestedPort = args["grpcPort"] as? Int, requestedPort != grpcPort {
+                        NSLog("[DonutVPN] ignoring requested grpc port %ld, forcing 17078", requestedPort)
                     }
-                    // One port, enforced at the native boundary. The foreground core
-                    // must listen on 17078; anything else - notably 0, which makes the
-                    // kernel pick an ephemeral port - is what produced
-                    // "UNAVAILABLE ... port = 515xx" on device.
-                    guard grpcPort == 17078 else {
-                        NSLog("[DonutVPN] invalid grpc port requested=%ld (expected 17078)", grpcPort)
-                        result(FlutterError(
-                            code: "INVALID_GRPC_PORT",
-                            message: "expected 17078, got \(grpcPort)",
-                            details: nil
-                        ))
-                        return
-                    }
-                    NSLog("[DonutVPN] grpc port requested=%ld resolved=127.0.0.1:%ld", grpcPort, grpcPort)
+                    NSLog("[DonutVPN] grpc port forced=%ld resolved=127.0.0.1:%ld", grpcPort, grpcPort)
 
                     NSLog("[DonutVPN] starting core with dir: %@ (working: %@, temp: %@, listen: 127.0.0.1:%ld)",
                           baseDir, workingDir, tempDir, grpcPort)
