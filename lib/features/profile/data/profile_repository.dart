@@ -180,7 +180,21 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
                         false,
                       ).flatMap(
                         (unit) => TaskEither.tryCatch(() async {
-                          await _profileDataSource.upsertProfile(profEntity);
+                          final effectiveId = await _profileDataSource.upsertProfile(profEntity);
+                          loggy.info(
+                            '[profile-upsert] remote add: generated id [$id] -> effective id [$effectiveId]',
+                          );
+                          if (effectiveId != id) {
+                            // upsertProfile reused an existing row. The core is started with
+                            // configs/<active row id>.json, so the freshly validated config
+                            // must move onto the reused id or the core reads a stale config.
+                            await file.copy(_profilePathResolver.file(effectiveId).path);
+                            loggy.info('[profile-upsert] remote add: config copied [$id] -> [$effectiveId]');
+                          }
+                          final written = _profilePathResolver.file(effectiveId);
+                          loggy.info(
+                            '[profile-upsert] remote add: config [${written.path}] exists=${written.existsSync()}',
+                          );
                           return unit;
                         }, ProfileFailure.unexpected),
                       ),
@@ -211,10 +225,18 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
                     ).flatMap(
                       (unit) => TaskEither.tryCatch(() async {
                         final effectiveId = await _profileDataSource.upsertProfile(profEntity);
+                        loggy.info(
+                          '[profile-upsert] local add: generated id [$id] -> effective id [$effectiveId]',
+                        );
                         if (effectiveId != id) {
                           // Reused an existing local profile: keep its config file in sync.
                           await file.copy(_profilePathResolver.file(effectiveId).path);
+                          loggy.info('[profile-upsert] local add: config copied [$id] -> [$effectiveId]');
                         }
+                        final written = _profilePathResolver.file(effectiveId);
+                        loggy.info(
+                          '[profile-upsert] local add: config [${written.path}] exists=${written.existsSync()}',
+                        );
                         return unit;
                       }, ProfileFailure.unexpected),
                     ),

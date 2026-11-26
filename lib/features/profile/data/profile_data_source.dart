@@ -156,12 +156,26 @@ class ProfileDao extends DatabaseAccessor<Db> with _$ProfileDaoMixin, InfraLogge
       final url = entry.url.value;
       final hasUserOverride = entry.userOverride.value != null;
 
+      loggy.log(
+        LogLevel.info,
+        '[profile-upsert] called: id=[$id] type=[$type] name=[$name] url=[$url] active=[$active] '
+            'hasUserOverride=[$hasUserOverride]',
+      );
+
       final existing = isRemote
           ? (url == null ? null : await getByUrlExact(url))
           : await getByNameExact(name);
       final sameKind = existing != null && existing.type == type;
 
+      loggy.log(
+        LogLevel.info,
+        '[profile-upsert] lookup by ${isRemote ? 'url' : 'name'}: '
+            '${existing == null ? 'no existing row' : 'row [${existing.id}] type=[${existing.type}] active=[${existing.active}]'} '
+            'sameKind=[$sameKind]',
+      );
+
       if (existing != null && sameKind) {
+        loggy.log(LogLevel.info, '[profile-upsert] branch=UPDATE_IN_PLACE [${existing.id}]');
         if (active) {
           await update(profileEntries).write(const ProfileEntriesCompanion(active: Value(false)));
         }
@@ -178,13 +192,18 @@ class ProfileDao extends DatabaseAccessor<Db> with _$ProfileDaoMixin, InfraLogge
           supportUrl: entry.supportUrl,
           // A refresh must never rename the user's profile.
           name: hasUserOverride ? entry.name : const Value<String>.absent(),
+          // The deactivate-all above cleared this row too: re-activate it, otherwise
+          // the profile that now holds the fresh config is left inactive and the core
+          // is started from a stale profile (or not started at all).
+          active: active ? const Value(true) : const Value<bool>.absent(),
         );
         await (update(profileEntries)..where((tbl) => tbl.id.equals(existing.id))).write(updateEntry);
-        loggy.log(LogLevel.info, 'profile upsert updated in place: [${existing.id}]');
+        loggy.log(LogLevel.info, 'profile upsert updated in place: [${existing.id}] active=[$active]');
         return existing.id;
       }
 
       final uniqueName = await _uniqueName(name);
+      loggy.log(LogLevel.info, '[profile-upsert] branch=INSERT [$id] as [$uniqueName] active=[$active]');
       if (active) {
         await update(profileEntries).write(const ProfileEntriesCompanion(active: Value(false)));
       }
