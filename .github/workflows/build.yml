@@ -476,7 +476,9 @@ jobs:
           echo "OK: packaged Assets.car contains AppIcon renditions"
 
       - name: Package Unsigned IPA
-        if: always() && contains(matrix.target, 'ios')
+        # success() only: if the build failed, report that failure instead of a
+        # confusing "Runner.app does not exist" from this packaging step.
+        if: success() && contains(matrix.target, 'ios')
         run: |
           set -euo pipefail
           APP_PATH="build/ios/iphoneos/Runner.app"
