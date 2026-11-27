@@ -407,8 +407,13 @@ jobs:
             echo "FAIL: ios/Runner/AppIcon.icon is present - it overrides AppIcon.appiconset"
             exit 1
           fi
-          if grep -q "ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = AppIcon" ios/Runner.xcodeproj/project.pbxproj; then
-            echo "FAIL: ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS must be YES, not AppIcon"
+          # Print what was actually read: without this the guard fails without
+          # showing which value (or which checkout) tripped it.
+          echo "--- ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS settings ---"
+          SYMBOL_SETTINGS=$(grep -n "ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS" ios/Runner.xcodeproj/project.pbxproj || true)
+          echo "${SYMBOL_SETTINGS:-<none found>}"
+          if [ -z "$SYMBOL_SETTINGS" ] || printf '%s\n' "$SYMBOL_SETTINGS" | grep -qv " = YES;"; then
+            echo "FAIL: ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS must be YES in every config (not AppIcon); see the settings listed above"
             exit 1
           fi
           APPICON_NAME_COUNT=$(grep -c "ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon" ios/Runner.xcodeproj/project.pbxproj)
