@@ -371,6 +371,18 @@ jobs:
           set -o pipefail
           touch "$RUNNER_TEMP/donut-icons.stamp"
           dart run flutter_launcher_icons 2>&1 | tee "$RUNNER_TEMP/flutter_launcher_icons.log"
+          # flutter_launcher_icons also rewrites ios/Runner.xcodeproj/project.pbxproj
+          # and writes "AppIcon" into ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS,
+          # leaving xcodebuild an invalid project. The icons it generates live in the
+          # asset catalog, so keep those PNGs and drop the project edits.
+          if ! git diff --quiet -- ios/Runner.xcodeproj/project.pbxproj; then
+            echo "--- project.pbxproj edits made by flutter_launcher_icons (reverting) ---"
+            git diff --stat -- ios/Runner.xcodeproj/project.pbxproj
+            git diff -- ios/Runner.xcodeproj/project.pbxproj | head -60
+            git checkout -- ios/Runner.xcodeproj/project.pbxproj
+          else
+            echo "OK: flutter_launcher_icons left project.pbxproj untouched"
+          fi
 
       - name: Verify iOS App Icons Were Regenerated
         if: contains(matrix.target, 'ios')
@@ -401,22 +413,40 @@ jobs:
           echo "OK: $COUNT/$TOTAL AppIcon PNGs regenerated in this run"
 
           echo "--- Icon root-cause guards ---"
+          # State which checkout is being judged: when the runner's tree differs
+          # from main, a failure here cannot be attributed to a commit without it.
+          echo "--- checkout provenance ---"
+          git rev-parse HEAD || true
+          git log -1 --format='%H %ci %s' || true
+          git status --porcelain -- ios/Runner.xcodeproj/project.pbxproj || true
+          shasum -a 256 ios/Runner.xcodeproj/project.pbxproj || true
           # An Icon Composer bundle in the target overrides AppIcon.appiconset, so
           # regenerating the catalog proves nothing while this file exists.
           if [ -e ios/Runner/AppIcon.icon ]; then
             echo "FAIL: ios/Runner/AppIcon.icon is present - it overrides AppIcon.appiconset"
             exit 1
           fi
+          # Icon generation rewrites this file, so judge the committed version: a
+          # step that edits the worktree must not be able to fail (or mask) this.
+          PBX=ios/Runner.xcodeproj/project.pbxproj
+          PBX_JUDGED="$PBX"
+          if git show HEAD:"$PBX" > "$RUNNER_TEMP/pbxproj.head" 2>/dev/null && [ -s "$RUNNER_TEMP/pbxproj.head" ]; then
+            PBX_JUDGED="$RUNNER_TEMP/pbxproj.head"
+            if ! diff -q "$PBX_JUDGED" "$PBX" >/dev/null 2>&1; then
+              echo "NOTE: $PBX differs from HEAD - a previous step rewrote it; judging HEAD"
+              diff "$PBX_JUDGED" "$PBX" | head -40 || true
+            fi
+          fi
           # Print what was actually read: without this the guard fails without
           # showing which value (or which checkout) tripped it.
           echo "--- ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS settings ---"
-          SYMBOL_SETTINGS=$(grep -n "ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS" ios/Runner.xcodeproj/project.pbxproj || true)
+          SYMBOL_SETTINGS=$(grep -n "ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS" "$PBX_JUDGED" || true)
           echo "${SYMBOL_SETTINGS:-<none found>}"
           if [ -z "$SYMBOL_SETTINGS" ] || printf '%s\n' "$SYMBOL_SETTINGS" | grep -qv " = YES;"; then
             echo "FAIL: ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS must be YES in every config (not AppIcon); see the settings listed above"
             exit 1
           fi
-          APPICON_NAME_COUNT=$(grep -c "ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon" ios/Runner.xcodeproj/project.pbxproj)
+          APPICON_NAME_COUNT=$(grep -c "ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon" "$PBX_JUDGED")
           if [ "$APPICON_NAME_COUNT" -lt 3 ]; then
             echo "FAIL: ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon found in only $APPICON_NAME_COUNT config(s)"
             exit 1
